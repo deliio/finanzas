@@ -1,6 +1,6 @@
 // Patrimonio neto = liquidez + activos (incl. fondos vía ETF espejo) − deudas.
 
-import { getState, addAccount, deleteAccount, addHolding, updateHolding, deleteHolding, setMarketData, round2 } from '../store.js';
+import { getState, addAccount, updateAccount, deleteAccount, accountValue, accountBreakdown, addHolding, updateHolding, deleteHolding, setMarketData, round2, todayISO } from '../store.js';
 import { MIRROR_PRESETS, hasApiKey, fetchQuote, fetchEurUsd, refreshMarket, estimateHolding, portfolioSummary } from '../market.js';
 import { money, esc, parseAmount, toast, icon, usd, signedPct, signedEur, tone, openSheet } from '../ui.js';
 
@@ -17,7 +17,7 @@ export function render(root) {
 
   const draw = () => {
     const { accounts, holdings, quotes = {}, fx } = getState();
-    const total = (k) => accounts.filter((a) => a.kind === k).reduce((s, a) => s + a.balance, 0);
+    const total = (k) => accounts.filter((a) => a.kind === k).reduce((s, a) => s + accountValue(a), 0);
     const funds = portfolioSummary();
     const liq = total('liquidez'), act = total('activo') + funds.value, debt = total('deuda');
     const net = liq + act - debt;
@@ -53,13 +53,19 @@ export function render(root) {
         const list = accounts.filter((a) => a.kind === kind);
         return `
           <div class="section-title">${k.label}<span class="num muted" style="font-size:15px">${money(total(kind))}</span></div>
-          ${list.length ? `<div class="list">${list.map((a) => `
+          ${list.length ? `<div class="list">${list.map((a) => {
+            const { value, interest, flows } = accountBreakdown(a);
+            const parts = [];
+            if (kind === 'liquidez' && a.interestRate) parts.push(`${pctPlain(a.interestRate)} · <span class="pos">+${money(interest)}</span>`);
+            if (flows) parts.push(`<span class="${tone(flows)}">${signedEur(flows)}</span> movs.`);
+            return `
             <button class="row" data-acc="${esc(a.id)}">
               <span class="icon">${icon(k.icon)}</span>
               <span class="main"><div class="title">${esc(a.name)}</div>
-                <div class="subtitle">Actualizado ${esc(a.updatedAt)}</div></span>
-              <span class="trail num ${kind === 'deuda' ? 'neg' : ''}">${kind === 'deuda' ? '−' : ''}${money(a.balance)}</span>
-            </button>`).join('')}</div>`
+                <div class="subtitle">${parts.length ? parts.join(' · ') : `Actualizado ${esc(a.updatedAt)}`}</div></span>
+              <span class="trail num ${kind === 'deuda' ? 'neg' : ''}">${kind === 'deuda' ? '−' : ''}${money(value)}</span>
+            </button>`;
+          }).join('')}</div>`
             : `<div class="card empty" style="padding:18px">Sin ${k.label.toLowerCase()}</div>`}`;
       }).join('')}
 
@@ -73,6 +79,8 @@ export function render(root) {
               <input id="acc-name" required placeholder="Cuenta nómina, hipoteca…"></div>
             <div class="field"><label for="acc-bal">Saldo</label>
               <input id="acc-bal" inputmode="decimal" required placeholder="0,00 €"></div>
+            <div class="field"><label for="acc-rate">Interés</label>
+              <input id="acc-rate" inputmode="decimal" placeholder="% anual (opcional)"></div>
           </div>
           <button class="btn btn-primary" type="submit">Añadir</button>
         </form>
@@ -99,10 +107,7 @@ export function render(root) {
     if (fund) return openFund(fund.dataset.fund, draw);
 
     const row = e.target.closest('[data-acc]');
-    if (row && confirm('¿Eliminar esta partida?')) {
-      deleteAccount(row.dataset.acc);
-      draw();
-    }
+    if (row) openAccount(row.dataset.acc, draw);
   });
 
   root.addEventListener('submit', (e) => {
@@ -114,6 +119,7 @@ export function render(root) {
       kind: root.querySelector('#acc-kind').value,
       name: root.querySelector('#acc-name').value,
       balance: Math.abs(balance),
+      interestRate: parseRate(root.querySelector('#acc-rate').value),
     });
     toast('Añadido');
     draw();
@@ -121,6 +127,76 @@ export function render(root) {
 
   draw();
   refresh();
+}
+
+/* ---------- Cuentas: detalle y edición --------------------------------- */
+
+const pctPlain = (n) => `${String(n).replace('.', ',')} %`;
+const parseRate = (v) => {
+  const n = parseAmount(v);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+function openAccount(id, onDone) {
+  const a = getState().accounts.find((x) => x.id === id);
+  if (!a) return;
+  const k = KINDS[a.kind];
+  const { value, interest, flows } = accountBreakdown(a);
+  const isLiq = a.kind === 'liquidez';
+  const estimated = isLiq && (a.interestRate || flows);
+
+  const { el, close } = openSheet(`
+    <h3 class="sheet-title">${esc(a.name)}</h3>
+    <p class="muted" style="text-align:center;margin:-8px 0 16px;font-size:13px">${k.label}</p>
+    <div class="list kv">
+      <div class="row"><span class="main">${estimated ? 'Saldo estimado hoy' : 'Saldo'}</span>
+        <span class="trail num">${money(value)}</span></div>
+      ${estimated ? `
+      <div class="row"><span class="main">Último saldo real</span><span class="trail num">${money(a.balance)} · ${esc(a.updatedAt)}</span></div>
+      ${a.interestRate ? `<div class="row"><span class="main">Intereses</span><span class="trail num pos">+${money(interest)}</span></div>` : ''}
+      <div class="row"><span class="main">Gastos e ingresos</span><span class="trail num ${tone(flows)}">${signedEur(flows)}</span></div>` : ''}
+    </div>
+
+    <form id="a-form">
+      <div class="field-group" style="margin-top:16px">
+        <div class="field"><label for="a-bal">Saldo real</label>
+          <input id="a-bal" inputmode="decimal" placeholder="${esc(money(value))}"></div>
+        ${isLiq ? `<div class="field"><label for="a-rate">Interés anual</label>
+          <input id="a-rate" inputmode="decimal" placeholder="Ej. 2,25" value="${a.interestRate ? esc(String(a.interestRate).replace('.', ',')) : ''}"></div>` : ''}
+      </div>
+      ${isLiq ? '<p class="hint" style="margin-top:-8px">Al poner el saldo real (el que ves en tu banco), los intereses y movimientos se cuentan de nuevo desde ahora.</p>' : ''}
+      <button class="btn btn-primary" type="submit">Guardar</button>
+    </form>
+    <button class="btn btn-danger" type="button" id="a-del" style="margin-top:18px">Eliminar</button>
+    <button class="btn" type="button" data-close>Cerrar</button>
+  `);
+
+  const $ = (s) => el.querySelector(s);
+  $('#a-form').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const patch = {};
+    const rawBal = $('#a-bal').value.trim();
+    if (rawBal) {
+      const bal = parseAmount(rawBal);
+      if (!Number.isFinite(bal)) return toast('Saldo no válido');
+      Object.assign(patch, { balance: round2(Math.abs(bal)), updatedAt: todayISO(), syncedAt: new Date().toISOString() });
+    }
+    if (isLiq) {
+      const rate = parseRate($('#a-rate').value);
+      // Si cambia el interés sin saldo nuevo, fijamos antes lo ya devengado.
+      if (!rawBal && rate !== (a.interestRate || 0)) {
+        Object.assign(patch, { balance: round2(accountValue(a)), updatedAt: todayISO(), syncedAt: new Date().toISOString() });
+      }
+      patch.interestRate = rate;
+    }
+    updateAccount(a.id, patch);
+    close(); toast('Guardado'); onDone();
+  });
+  $('#a-del').addEventListener('click', () => {
+    if (!confirm(`¿Eliminar ${a.name}?`)) return;
+    deleteAccount(a.id);
+    close(); onDone();
+  });
 }
 
 /* ---------- Bloque de fondos ------------------------------------------ */
@@ -332,3 +408,4 @@ function openFund(id, onDone) {
     close(); onDone();
   });
 }
+
