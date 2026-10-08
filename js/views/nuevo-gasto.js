@@ -5,7 +5,7 @@
 //   /#/nuevo?importe=15,50%20€&comercio=Mercadona&categoria=supermercado
 // Alias aceptados: amount, merchant, descripcion, category, fecha/date, tipo/type.
 
-import { addTransaction, categoriesOf, todayISO } from '../store.js';
+import { addTransaction, categoriesOf, todayISO, getState, setSetting } from '../store.js';
 import { esc, parseAmount, amountToInput, toast, icon } from '../ui.js';
 
 const PARAM_ALIASES = {
@@ -97,6 +97,11 @@ export function render(root, { prefill, navigate }) {
     category: null,
     date: prefill?.date ?? todayISO(),
   };
+  // Cuenta: la última usada (si sigue existiendo) o la primera de liquidez.
+  const accounts = getState().accounts.filter((a) => a.kind === 'liquidez');
+  const last = getState().settings.lastAccount;
+  const defaultAccount = accounts.some((a) => a.id === last) ? last : (accounts[0]?.id ?? '');
+
   // Solo aceptamos la categoría del prefill si existe para ese tipo.
   if (prefill?.category && categoriesOf(form.type).some((c) => c.id === prefill.category)) {
     form.category = prefill.category;
@@ -133,6 +138,13 @@ export function render(root, { prefill, navigate }) {
         <label for="nt-date">Fecha</label>
         <input id="nt-date" type="date" value="${esc(form.date)}">
       </div>
+      ${accounts.length ? `<div class="field">
+        <label for="nt-account">Cuenta</label>
+        <select id="nt-account">
+          ${accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === defaultAccount ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
+          <option value="" ${defaultAccount ? '' : 'selected'}>Ninguna</option>
+        </select>
+      </div>` : ''}
     </div>
 
     <div class="section-title" style="margin-top:0">Categoría</div>
@@ -199,7 +211,9 @@ export function render(root, { prefill, navigate }) {
       description: $('#nt-desc').value,
       category: form.category,
       date: $('#nt-date').value || todayISO(),
+      account: $('#nt-account')?.value ?? '',
     });
+    if ($('#nt-account')) setSetting('lastAccount', $('#nt-account').value);
     // Vaciamos el portapapeles para no registrar el mismo pago dos veces.
     if (prefill?.source === 'clipboard') navigator.clipboard?.writeText('').catch(() => {});
     if (navigator.vibrate) navigator.vibrate(10);
@@ -214,3 +228,4 @@ export function render(root, { prefill, navigate }) {
 
   return () => document.body.classList.remove('is-modal');
 }
+
