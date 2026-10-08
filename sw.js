@@ -1,6 +1,6 @@
 // Service worker: app shell offline + stale-while-revalidate.
 // Sube CACHE_VERSION cada vez que publiques cambios para forzar la actualización.
-const CACHE_VERSION = 'finanzas-v4';
+const CACHE_VERSION = 'finanzas-v5';
 
 const APP_SHELL = [
   './',
