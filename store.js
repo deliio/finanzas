@@ -95,6 +95,7 @@ export function addTransaction(tx) {
     category: tx.category,
     date: tx.date ?? todayISO(),
     note: tx.note ?? '',
+    account: tx.account || '', // id de la cuenta de liquidez de la que sale/entra
     createdAt: new Date().toISOString(),
   };
   state.transactions.push(record);
@@ -126,10 +127,43 @@ export const categoryById = (id) =>
 
 /* ---------- Cuentas / patrimonio ------------------------------------- */
 
-export function addAccount({ kind, name, balance }) {
-  state.accounts.push({ id: uid(), kind, name: name.trim(), balance: round2(balance), updatedAt: todayISO() });
+// interestRate: % anual (p. ej. 2.25). Solo se aplica a cuentas de liquidez.
+// syncedAt: momento exacto del último saldo real; los movimientos posteriores se suman/restan.
+export function addAccount({ kind, name, balance, interestRate = 0 }) {
+  state.accounts.push({ id: uid(), kind, name: name.trim(), balance: round2(balance), interestRate,
+    updatedAt: todayISO(), syncedAt: new Date().toISOString() });
   persist();
 }
+
+export function updateAccount(id, patch) {
+  const a = state.accounts.find((x) => x.id === id);
+  if (!a) return;
+  Object.assign(a, patch);
+  persist();
+}
+
+/**
+ * Desglose del saldo estimado de una cuenta:
+ *   interest: intereses devengados desde el último saldo real (capitalización diaria
+ *             con el % anual; se aproxima muy bien al abono mensual).
+ *   flows:    ingresos − gastos asignados a la cuenta y apuntados después de ese saldo.
+ */
+export function accountBreakdown(a, today = todayISO()) {
+  let interest = 0, flows = 0;
+  if (a.kind === 'liquidez') {
+    if (a.interestRate) {
+      const days = Math.max(0, (Date.parse(today) - Date.parse(a.updatedAt)) / 86400000);
+      interest = a.balance * (Math.pow(1 + a.interestRate / 100, days / 365) - 1);
+    }
+    const since = a.syncedAt || a.updatedAt;
+    for (const t of state.transactions) {
+      if (t.account === a.id && t.createdAt > since) flows += t.type === 'income' ? t.amount : -t.amount;
+    }
+  }
+  return { interest, flows, value: a.balance + interest + flows };
+}
+
+export const accountValue = (a) => accountBreakdown(a).value;
 
 export function deleteAccount(id) {
   state.accounts = state.accounts.filter((a) => a.id !== id);
