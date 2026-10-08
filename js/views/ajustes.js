@@ -47,9 +47,6 @@ export function render(root) {
     const btn = e.currentTarget;
     const key = root.querySelector('#fh-key').value.trim();
     if (!key) { setSetting('finnhubKey', ''); return toast('Clave eliminada'); }
-    if (key.length >= 40) {
-      return alert('Parece que has pegado la API key y el Webhook Secret juntos. Copia solo el campo "API key" de tu panel de Finnhub.');
-    }
     btn.disabled = true; btn.textContent = 'Probando…';
     try {
       const q = await fetchQuote('VOO', key);
