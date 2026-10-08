@@ -12,7 +12,7 @@ export function stateToCSV(state) {
   const rows = [COLUMNS];
   for (const t of state.transactions) {
     rows.push(['transaccion', t.id, t.date, t.type, t.amount.toFixed(2), t.description, t.category,
-      JSON.stringify({ note: t.note, createdAt: t.createdAt })]);
+      JSON.stringify({ note: t.note, createdAt: t.createdAt, account: t.account || '' })]);
   }
   for (const c of state.categories) {
     rows.push(['categoria', c.id, '', c.kind, c.budget ?? '', c.name, '', JSON.stringify(c)]);
@@ -53,6 +53,7 @@ export function csvToState(text) {
           date: get(r, 'fecha'),
           note: extra.note ?? '',
           createdAt: extra.createdAt ?? new Date().toISOString(),
+          account: extra.account ?? '',
         });
         break;
       }
