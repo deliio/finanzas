@@ -51,30 +51,6 @@ export async function fetchEurUsd() {
 }
 
 /**
- * Tipo de cambio para gastos en otra divisa (multidivisa).
- * Devuelve cuántos € vale 1 unidad de `from` en la fecha indicada (o la última publicada).
- */
-const rateCache = new Map();
-export async function fetchRateToEur(from, date) {
-  if (from === 'EUR') return { rate: 1, date };
-  const today = new Date().toISOString().slice(0, 10);
-  const when = !date || date >= today ? 'latest' : date;
-  const key = `${from}:${when}`;
-  if (rateCache.has(key)) return rateCache.get(key);
-  let res;
-  try {
-    res = await fetch(`https://api.frankfurter.dev/v1/${when}?base=${from}&symbols=EUR`);
-  } catch {
-    throw new Error('Sin conexión para consultar el tipo de cambio.');
-  }
-  if (!res.ok) throw new Error('No se pudo obtener el tipo de cambio.');
-  const data = await res.json();
-  const out = { rate: data.rates.EUR, date: data.date };
-  rateCache.set(key, out);
-  return out;
-}
-
-/**
  * Refresca las cotizaciones de todos los tickers usados (respetando la caché).
  * Devuelve la lista de errores (vacía si todo fue bien).
  */

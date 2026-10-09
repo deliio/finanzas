@@ -17,20 +17,6 @@ export const ICONS = {
   trending: '<path d="m3 17 6-6 4 4 8-8M14 7h7v7"/>',
   bank:     '<path d="M3 21h18M5 21V10M19 21V10M9.7 21V10M14.3 21V10M12 3 2 8h20z"/>',
   card:     '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
-  eye:      '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
-  eyeOff:   '<path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.4 3.3M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/>',
-  search:   '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
-  tag:      '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>',
-  piggy:    '<path d="M19 9.5c.7.4 1.5 1 2 2.5h1v4h-2a7 7 0 0 1-2 2v3h-3v-2h-4v2H8v-3a6.5 6.5 0 0 1-3-5.5A6.5 6.5 0 0 1 11.5 6H15l3-2v5.5z"/><path d="M15.5 11h.01"/>',
-  clock:    '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-  chart:    '<path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-7"/>',
-  pie:      '<path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
-  split:    '<path d="M16 3h5v5M8 3H3v5M21 3l-7 7M3 3l7 7M12 22v-8"/>',
-  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h20"/>',
-  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
-  inbox:    '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/>',
-  chevron:  '<path d="m9 18 6-6-6-6"/>',
-  dumbbell: '<path d="M6.5 6.5v11M17.5 6.5v11M3 9.5v5M21 9.5v5M6.5 12h11"/>',
 };
 
 export const icon = (name, cls = 'ico') =>
