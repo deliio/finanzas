@@ -1,6 +1,6 @@
 // Service worker: red primero (siempre la última versión) con copia offline de respaldo.
 // Sube CACHE_VERSION cada vez que publiques cambios para forzar la actualización.
-const CACHE_VERSION = 'finanzas-v11';
+const CACHE_VERSION = 'finanzas-v12';
 
 const APP_SHELL = [
   './',
@@ -62,7 +62,13 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.open(CACHE_VERSION).then(async (cache) => {
       try {
-        const res = await fetch(req, { cache: 'no-cache' });
+        // Las navegaciones no admiten opciones extra en fetch(req, …): se piden por URL.
+        const fresh = isNavigation
+          ? new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' })
+          : new Request(req, { cache: 'no-cache' });
+        const res = await fetch(fresh);
+        // Una navegación no puede responderse con una redirección ya seguida.
+        if (isNavigation && res.redirected) return fetch(req);
         if (res.ok) cache.put(cacheKey, res.clone());
         return res;
       } catch {
