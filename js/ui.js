@@ -108,13 +108,68 @@ export function ring(pct) {
   </svg>`;
 }
 
+/** Nº de personas de un gasto compartido (los antiguos guardaban `true` = 2). */
+export const splitCount = (tx) => (tx.split === true ? 2 : Number(tx.split) || 1);
+
+const CURRENCY_SYMBOL = { EUR: '€', GBP: '£', USD: '$' };
+export const currencySymbol = (c) => CURRENCY_SYMBOL[c] ?? c;
+
 export function txRow(tx, cat) {
+  const extras = [];
+  if (tx.papi) extras.push('<span class="papi-tag">Papi</span>');
+  if (tx.split) extras.push(`÷${splitCount(tx)}`);
+  if (tx.currency) extras.push(`<span class="num">${amountToInput(tx.originalAmount)} ${currencySymbol(tx.currency)}</span>`);
+  if (tx.recurringId) extras.push('fijo');
   return `<button class="row" data-tx="${esc(tx.id)}">
     <span class="icon">${icon(cat.icon)}</span>
     <span class="main">
       <div class="title">${esc(tx.description || cat.name)}</div>
-      <div class="subtitle">${esc(cat.name)} · ${shortDate(tx.date)}</div>
+      <div class="subtitle">${esc(cat.name)} · ${shortDate(tx.date)}${extras.length ? ' · ' + extras.join(' · ') : ''}</div>
+      ${tx.tags?.length ? `<div class="chips">${tx.tags.map((t) => `<span class="chip">#${esc(t)}</span>`).join('')}</div>` : ''}
     </span>
     <span class="trail num ${tx.type === 'income' ? 'pos' : 'neg'}">${signedMoney(tx.amount, tx.type)}</span>
   </button>`;
 }
+
+/* ---------- Modo privacidad ------------------------------------------- */
+
+/** Botón del ojo para la cabecera. El clic lo gestiona app.js (delegado global). */
+export const privacyButton = () =>
+  `<button type="button" class="icon-btn" data-privacy-toggle aria-label="Ocultar cifras">
+    ${icon(document.body.classList.contains('privacy') ? 'eyeOff' : 'eye')}
+  </button>`;
+
+/* ---------- Mes seleccionado (Time Travel) ----------------------------- */
+// Compartido entre Dashboard y Análisis; dura lo que la sesión de la app.
+
+const thisMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+export function getSelectedMonth() {
+  try { return sessionStorage.getItem('finanzas:mes') || thisMonth(); } catch { return thisMonth(); }
+}
+export function setSelectedMonth(key) {
+  try { sessionStorage.setItem('finanzas:mes', key); } catch { /* sin almacenamiento */ }
+}
+export const isCurrentMonth = (key) => key === thisMonth();
+
+/** Selector de mes con aspecto de título. */
+export function monthSelect(months, selected, id = 'month-select') {
+  return `<label class="month-select">
+    <select id="${id}" aria-label="Mes">
+      ${months.map((m) => `<option value="${m}" ${m === selected ? 'selected' : ''}>${monthLabel(m)}</option>`).join('')}
+    </select>
+    <svg class="ico" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+  </label>`;
+}
+
+/** Etiqueta de un mes 'YYYY-MM' → "Octubre 2026". */
+export function monthLabel(key) {
+  const [y, m] = key.split('-').map(Number);
+  return monthName(new Date(y, m - 1, 1)).replace(' de ', ' ');
+}
+
+/** Etiqueta corta de un mes 'YYYY-MM' → "oct". */
+export const monthShort = (key) =>
+  new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(new Date(key + '-01T00:00:00')).replace('.', '');

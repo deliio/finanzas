@@ -1,6 +1,6 @@
 // Service worker: app shell offline + stale-while-revalidate.
 // Sube CACHE_VERSION cada vez que publiques cambios para forzar la actualización.
-const CACHE_VERSION = 'finanzas-v4';
+const CACHE_VERSION = 'finanzas-v9';
 
 const APP_SHELL = [
   './',
@@ -12,12 +12,15 @@ const APP_SHELL = [
   './js/ui.js',
   './js/icons.js',
   './js/market.js',
+  './js/networth.js',
+  './js/charts.js',
   './js/csv.js',
   './js/views/dashboard.js',
   './js/views/movimientos.js',
   './js/views/nuevo-gasto.js',
   './js/views/patrimonio.js',
   './js/views/ajustes.js',
+  './js/views/analisis.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',

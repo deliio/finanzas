@@ -2,7 +2,7 @@
 // sin depender de presupuestos (#7), análisis por etiquetas (#9) y widget
 // "Estilo de vida" (#15).
 
-import { getState, categoryById, categoriesOf, availableMonths, transactionsSorted, setSetting, DEFAULT_LIFESTYLE, todayISO, prevMonthKey } from '../store.js';
+import { getState, categoryById, categoriesOf, availableMonths, transactionsSorted, setSetting, DEFAULT_LIFESTYLE, todayISO, prevMonthKey, bucketOf, PAPI } from '../store.js';
 import { money, esc, icon, privacyButton, monthSelect, getSelectedMonth, setSelectedMonth, monthShort, openSheet, txRow, toast } from '../ui.js';
 import { donut, barChart, PALETTE } from '../charts.js';
 import { openTxSheet } from './movimientos.js';
@@ -25,7 +25,8 @@ export function render(root) {
     const total = expenses.reduce((s, t) => s + t.amount, 0);
 
     // Por categoría (todas, aunque no tengan presupuesto).
-    const byCat = groupSum(expenses, (t) => [t.category]);
+    // Lo pagado por papi va a su propio grupo (como una categoría más).
+    const byCat = groupSum(expenses, (t) => [bucketOf(t)]);
     const catRows = categoriesOf('expense')
       .map((c) => ({ c, ...(byCat[c.id] || { sum: 0, count: 0 }) }))
       .sort((a, b) => b.sum - a.sum);
@@ -138,9 +139,9 @@ function lastMonths(n) {
 
 /* ---------- Tracker acumulativo (categoría o etiqueta) ----------------- */
 
-function openTracker({ kind, id }, onDone) {
+export function openTracker({ kind, id }, onDone) {
   const isCat = kind === 'cat';
-  const test = isCat ? (t) => t.category === id : (t) => (t.tags || []).includes(id);
+  const test = isCat ? (t) => bucketOf(t) === id : (t) => (t.tags || []).includes(id);
   const list = transactionsSorted(getState().transactions.filter((t) => t.type === 'expense' && test(t)));
   const today = todayISO();
   const sumWhere = (fn) => list.filter(fn).reduce((s, t) => s + t.amount, 0);
@@ -164,6 +165,7 @@ function openTracker({ kind, id }, onDone) {
     <div class="card" style="margin-top:12px">
       ${barChart(months6.map((m, i) => ({ label: monthShort(m), value: sumWhere((t) => t.date.startsWith(m)), highlight: i === 5 })))}
     </div>
+    ${id === PAPI.id ? papiBreakdown(list, today.slice(0, 7)) : ''}
     <div class="section-title">Últimos movimientos</div>
     ${list.length ? `<div class="list">${list.slice(0, 15).map((t) => txRow(t, categoryById(t.category))).join('')}</div>`
       : '<div class="card empty">Sin gastos todavía</div>'}
@@ -173,6 +175,21 @@ function openTracker({ kind, id }, onDone) {
     const row = e.target.closest('[data-tx]');
     if (row) { close(); openTxSheet(row.dataset.tx, onDone); }
   });
+}
+
+/** Qué te ha pagado papi este mes, por categoría real. */
+function papiBreakdown(list, monthKey) {
+  const month = list.filter((t) => t.date.startsWith(monthKey));
+  const byCat = groupSum(month, (t) => [t.category]);
+  const rows = Object.entries(byCat).sort((a, b) => b[1].sum - a[1].sum);
+  if (!rows.length) return '';
+  return `<div class="section-title">Este mes, por categoría</div>
+    <div class="list">${rows.map(([cid, v]) => {
+      const c = categoryById(cid);
+      return `<div class="row"><span class="icon">${icon(c.icon)}</span>
+        <span class="main"><div class="title">${esc(c.name)}</div><div class="subtitle">${v.count} gasto${v.count === 1 ? '' : 's'}</div></span>
+        <span class="trail num">${money(v.sum)}</span></div>`;
+    }).join('')}</div>`;
 }
 
 function monthsBetween(a, b) {
