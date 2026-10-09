@@ -1,6 +1,6 @@
-// Service worker: app shell offline + stale-while-revalidate.
+// Service worker: red primero (siempre la última versión) con copia offline de respaldo.
 // Sube CACHE_VERSION cada vez que publiques cambios para forzar la actualización.
-const CACHE_VERSION = 'finanzas-v9';
+const CACHE_VERSION = 'finanzas-v10';
 
 const APP_SHELL = [
   './',
@@ -27,7 +27,12 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_VERSION).then((c) => c.addAll(APP_SHELL)));
+  // cache: 'reload' salta la caché HTTP del navegador (GitHub Pages cachea 10 min):
+  // así la copia offline nunca mezcla archivos de versiones distintas.
+  event.waitUntil(
+    caches.open(CACHE_VERSION)
+      .then((c) => c.addAll(APP_SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+  );
   self.skipWaiting();
 });
 
@@ -43,7 +48,7 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
-  // Peticiones a otros orígenes (APIs de cotizaciones) van siempre a red.
+  // Peticiones a otros orígenes (APIs de cotizaciones y divisas) van siempre a red.
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
@@ -52,16 +57,18 @@ self.addEventListener('fetch', (event) => {
   const isNavigation = req.mode === 'navigate';
   const cacheKey = isNavigation ? './index.html' : req;
 
+  // Red primero: con conexión siempre se usa la versión publicada;
+  // sin conexión (o si la red falla) se sirve la copia guardada.
   event.respondWith(
     caches.open(CACHE_VERSION).then(async (cache) => {
-      const cached = await cache.match(cacheKey, { ignoreSearch: isNavigation });
-      const network = fetch(req)
-        .then((res) => {
-          if (res.ok && !isNavigation) cache.put(req, res.clone());
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
+      try {
+        const res = await fetch(req, { cache: 'no-cache' });
+        if (res.ok) cache.put(cacheKey, res.clone());
+        return res;
+      } catch {
+        const cached = await cache.match(cacheKey, { ignoreSearch: isNavigation });
+        return cached || Response.error();
+      }
     })
   );
 });

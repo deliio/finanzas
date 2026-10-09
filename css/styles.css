@@ -499,3 +499,14 @@ a.donut-card { color: inherit; }
 /* Anillos de presupuesto pulsables */
 button.ring-card { width: 100%; color: inherit; font: inherit; }
 button.ring-card:active { transform: scale(0.97); }
+
+/* Autorreparación (index.html) */
+.rescue {
+  position: fixed; left: 16px; right: 16px; top: calc(env(safe-area-inset-top, 0px) + 40px); z-index: 100;
+  background: #1f1f1f; border-radius: 18px; padding: 20px; text-align: center; color: #fff;
+  font: 15px/1.4 -apple-system, system-ui, sans-serif; box-shadow: 0 10px 40px rgba(0,0,0,.6);
+}
+.rescue[hidden] { display: none; }
+.rescue p { margin: 0 0 16px; color: #8e8e93; }
+.rescue strong { color: #fff; }
+.rescue button { width: 100%; min-height: 50px; border-radius: 14px; border: 0; background: #fff; color: #000; font: 600 17px -apple-system, system-ui, sans-serif; }
