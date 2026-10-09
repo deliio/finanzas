@@ -178,9 +178,9 @@ export function render(root, { prefill, navigate }) {
         <label>Dividir entre</label>
         <span class="field-note" id="nt-split-note"></span>
         <div class="stepper" role="group" aria-label="Personas">
-          <button type="button" data-step="-1" aria-label="Menos">−</button>
+          <button type="button" data-step="-1" aria-label="Una persona menos"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
           <span id="nt-split-n" class="stepper-val">1</span>
-          <button type="button" data-step="1" aria-label="Más">+</button>
+          <button type="button" data-step="1" aria-label="Una persona más"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
         </div>
       </div>
       <div class="field" id="nt-papi-row">
@@ -246,6 +246,8 @@ export function render(root, { prefill, navigate }) {
     }
     $('#nt-hint').innerHTML = parts.join(' · ');
     $('#nt-split-n').textContent = form.split;
+    $('[data-step="-1"]').disabled = form.split <= 1;
+    $('[data-step="1"]').disabled = form.split >= 20;
     $('#nt-split-note').textContent = form.split > 1
       ? (form.amount ? money(finalEur()) : `${form.split} personas`)
       : 'Solo yo';

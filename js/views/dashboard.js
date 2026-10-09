@@ -3,7 +3,7 @@
 
 import { transactionsInMonthKey, transactionsSorted, categoryById, categoriesOf, availableMonths, bucketOf, PAPI } from '../store.js';
 import { money, ring, txRow, esc, icon, privacyButton, monthSelect, getSelectedMonth, setSelectedMonth, isCurrentMonth, monthLabel } from '../ui.js';
-import { donut, PALETTE } from '../charts.js';
+import { spendingDonuts } from '../charts.js';
 import { pastePayment } from './nuevo-gasto.js';
 import { openTxSheet } from './movimientos.js';
 import { openTracker } from './analisis.js';
@@ -29,11 +29,6 @@ export function render(root, { navigate }) {
     const budgets = categoriesOf('expense').filter((c) => c.budget > 0);
     const latest = transactionsSorted(monthTx).slice(0, 5);
 
-    // Top categorías del mes para el donut (resto agrupado en "Otras").
-    const ranked = Object.entries(spentByCat).sort((a, b) => b[1] - a[1]);
-    const top = ranked.slice(0, 5).map(([id, value], i) => ({ label: categoryById(id).name, value, color: PALETTE[i] }));
-    const rest = ranked.slice(5).reduce((s, [, v]) => s + v, 0);
-    if (rest) top.push({ label: 'Otras', value: rest, color: PALETTE[8] });
 
     root.innerHTML = `
       <header class="page-header">
@@ -83,13 +78,7 @@ export function render(root, { navigate }) {
       </button></div>` : ''}
 
       <div class="section-title">Gasto por categoría <a href="#/analisis">Análisis</a></div>
-      ${top.length ? `<a class="card donut-card" href="#/analisis">
-        ${donut(top, { size: 132, thickness: 16, centerLabel: 'Gastado' })}
-        <div class="donut-legend">${top.map((s) => `
-          <div class="legend-row"><i class="dot" style="background:${s.color}"></i>
-            <span class="legend-name">${esc(s.label)}</span><span class="num">${money(s.value, { decimals: false })}</span></div>`).join('')}
-        </div>
-      </a>` : `<div class="card empty">Sin gastos este mes</div>`}
+      ${spendingDonuts(monthTx.filter((t) => t.type === 'expense'), { href: '#/analisis' })}
 
       <div class="section-title">Movimientos del mes <a href="#/movimientos">Ver todos</a></div>
       ${latest.length

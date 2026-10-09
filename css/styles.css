@@ -510,3 +510,25 @@ button.ring-card:active { transform: scale(0.97); }
 .rescue p { margin: 0 0 16px; color: #8e8e93; }
 .rescue strong { color: #fff; }
 .rescue button { width: 100%; min-height: 50px; border-radius: 14px; border: 0; background: #fff; color: #000; font: 600 17px -apple-system, system-ui, sans-serif; }
+
+/* ---------- v11: dos gráficas (tú / papi) ------------------------------ */
+.donut-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; color: inherit; }
+.donut-col { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.donut-col + .donut-col { border-left: 0.5px solid var(--sep); padding-left: 14px; }
+.donut-col-title { font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: 10px; align-self: flex-start; }
+.donut-col .donut-legend { width: 100%; margin-top: 12px; gap: 5px; }
+.donut-col .legend-row { font-size: 12.5px; gap: 6px; }
+.donut-col .donut-center .num { font-size: 16px; }
+.donut-none { height: 118px; display: grid; place-items: center; font-size: 13px; }
+
+/* ---------- v11: selector − n + ----------------------------------------- */
+.stepper { display: flex; align-items: center; gap: 10px; background: none; padding: 0; border-radius: 0; flex: none; }
+.stepper button {
+  width: 30px; height: 30px; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; background: var(--card-3); color: var(--text);
+  transition: transform .1s, opacity .15s;
+}
+.stepper button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.stepper button:active:not(:disabled) { transform: scale(0.9); background: var(--text); color: #000; }
+.stepper button:disabled { opacity: .3; }
+.stepper-val { min-width: 18px; text-align: center; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }

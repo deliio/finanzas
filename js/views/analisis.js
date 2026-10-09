@@ -4,7 +4,7 @@
 
 import { getState, categoryById, categoriesOf, availableMonths, transactionsSorted, setSetting, DEFAULT_LIFESTYLE, todayISO, prevMonthKey, bucketOf, PAPI } from '../store.js';
 import { money, esc, icon, privacyButton, monthSelect, getSelectedMonth, setSelectedMonth, monthShort, openSheet, txRow, toast } from '../ui.js';
-import { donut, barChart, PALETTE } from '../charts.js';
+import { barChart, spendingDonuts } from '../charts.js';
 import { openTxSheet } from './movimientos.js';
 
 const PERIODS = [
@@ -33,7 +33,6 @@ export function render(root) {
     // Categorías que ya no existen pero tienen gastos.
     Object.keys(byCat).filter((id) => !catRows.some((r) => r.c.id === id))
       .forEach((id) => catRows.push({ c: categoryById(id), ...byCat[id] }));
-    const colored = catRows.filter((r) => r.sum > 0).map((r, i) => ({ ...r, color: PALETTE[i % PALETTE.length] }));
 
     const byTag = groupSum(expenses, (t) => t.tags || []);
     const tagRows = Object.entries(byTag).map(([tag, v]) => ({ tag, ...v })).sort((a, b) => b.sum - a.sum);
@@ -50,14 +49,7 @@ export function render(root) {
       </div>
       ${period === 'mes' ? `<div style="margin:-6px 0 14px">${monthSelect(months, key, 'an-month')}</div>` : ''}
 
-      <section class="card donut-card big">
-        ${donut(colored.map((r) => ({ label: r.c.name, value: r.sum, color: r.color })), { size: 150, thickness: 20, centerLabel: 'Gastado' })}
-        <div class="donut-legend">
-          ${colored.slice(0, 6).map((r) => `<div class="legend-row"><i class="dot" style="background:${r.color}"></i>
-            <span class="legend-name">${esc(r.c.name)}</span><span class="muted">${pct(r.sum, total)}</span></div>`).join('')
-            || '<div class="muted">Sin gastos en este periodo</div>'}
-        </div>
-      </section>
+      ${spendingDonuts(expenses)}
 
       ${lifestyleCard(expenses)}
 
