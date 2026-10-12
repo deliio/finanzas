@@ -51,6 +51,13 @@ export function render(root) {
 
       ${spendingDonuts(expenses)}
 
+      <a class="card map-cta" href="#/mapa">
+        <span class="icon">${icon('map')}</span>
+        <span class="main"><div class="title">Mapa de gastos</div>
+          <div class="subtitle">${located(expenses)} de ${expenses.length} gastos con ubicación en este periodo</div></span>
+        <span class="muted">${icon('chevron')}</span>
+      </a>
+
       ${lifestyleCard(expenses)}
 
       <div class="section-title">Categorías</div>
@@ -119,6 +126,8 @@ function groupSum(list, keysOf) {
   }
   return out;
 }
+
+const located = (list) => list.filter((t) => t.location).length;
 
 const pct = (v, total) => (total ? `${Math.round((v / total) * 100)} %` : '0 %');
 

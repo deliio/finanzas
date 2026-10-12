@@ -3,9 +3,10 @@
 // Gastos (#4):    /?importe=15.50&comercio=Mercadona
 // Ingresos (#5):  /?ingreso=1200&origen=Nómina   (también ?tipo=ingreso&importe=...)
 // Extras opcionales: categoria, fecha (AAAA-MM-DD), etiquetas (#viajes,#comida), divisa (GBP|USD)
-// Portapapeles (PWA instalada): FINANZAS|<Importe>|<Comercio>  ·  INGRESO|<Importe>|<Origen>
+// Portapapeles (PWA instalada): FINANZAS|<Importe>|<Comercio>[|<Latitud>|<Longitud>]  ·  INGRESO|<Importe>|<Origen>
+// Ubicación por URL: &lat=40.4168&lon=-3.7038
 
-import { addTransaction, categoriesOf, todayISO, getState, setSetting, allTags, normalizeTags, round2,
+import { addTransaction, categoriesOf, todayISO, getState, setSetting, allTags, normalizeTags, round2, validLocation,
   payers, payerById, addDebt, knownDebtors, persist } from '../store.js';
 import { fetchRateToEur } from '../market.js';
 import { esc, parseAmount, amountToInput, toast, icon, money, currencySymbol } from '../ui.js';
@@ -21,7 +22,12 @@ const PARAM_ALIASES = {
   type:        ['tipo', 'type'],
   tags:        ['etiquetas', 'tags'],
   currency:    ['divisa', 'currency', 'moneda'],
+  lat:         ['lat', 'latitud', 'latitude'],
+  lon:         ['lon', 'lng', 'longitud', 'longitude'],
 };
+
+/** "40,4168" o "40.4168" → 40.4168 (la coma es decimal: las coordenadas no llevan miles). */
+const coord = (s) => Number(String(s ?? '').trim().replace(',', '.').replace(/[^\d.-]/g, ''));
 
 /**
  * Lee los parámetros de prefill de la URL actual mediante URLSearchParams.
@@ -60,6 +66,7 @@ export function readPrefillFromURL(loc = window.location) {
     type: rawIncome != null || ['ingreso', 'income'].includes(rawType) ? 'income' : 'expense',
     tags: normalizeTags(pick(PARAM_ALIASES.tags) || ''),
     currency: CURRENCIES.includes(currency) ? currency : 'EUR',
+    location: validLocation({ lat: coord(pick(PARAM_ALIASES.lat)), lon: coord(pick(PARAM_ALIASES.lon)) }),
   };
 }
 
@@ -82,10 +89,13 @@ export function parseClipboardPayment(text = '') {
   if (m) {
     const amount = parseAmount(m[2]);
     if (!Number.isFinite(amount)) return null;
+    // Campos opcionales al final: |<latitud>|<longitud> (acción "Get Current Location" del Atajo).
+    const [merchant, lat, lon] = m[3].split('|');
     return {
-      amount: Math.abs(amount), description: m[3].trim(), category: null, date: null, tags: [],
+      amount: Math.abs(amount), description: merchant.trim(), category: null, date: null, tags: [],
       type: /INGRESO/i.test(m[1]) ? 'income' : 'expense',
       currency: detectCurrency(m[2]) || 'EUR',
+      location: validLocation({ lat: coord(lat), lon: coord(lon) }),
       source: 'clipboard',
     };
   }
@@ -122,6 +132,9 @@ export function render(root, { prefill, navigate }) {
     rateState: 'ok',                     // ok | loading | error
     split: 1,                            // nº de personas entre las que se divide (1 = no compartido)
     paidBy: '',                          // '' = lo pagas tú; si no, id de quien lo paga (no sale de tus cuentas)
+    location: prefill?.location ?? null, // { lat, lon } para el mapa de calor
+    locState: prefill?.location ? 'ok' : 'off', // off | loading | ok | denied | error
+    locFromShortcut: Boolean(prefill?.location),
     category: null,
   };
   // Cuenta: la última usada (si sigue existiendo) o la primera de liquidez.
@@ -198,6 +211,11 @@ export function render(root, { prefill, navigate }) {
           ${payerList.map((p) => `<button type="button" data-payer="${esc(p.id)}" aria-pressed="false">${esc(p.name)}</button>`).join('')}
         </div>
       </div>` : ''}
+      <div class="field" id="nt-loc-row">
+        <label for="nt-loc">Ubicación</label>
+        <span class="field-note" id="nt-loc-note"></span>
+        <input id="nt-loc" type="checkbox" class="switch" role="switch">
+      </div>
       <div class="field">
         <label for="nt-tags">Etiquetas</label>
         <input id="nt-tags" type="text" placeholder="#viajes #mecanica" autocomplete="off"
@@ -227,7 +245,9 @@ export function render(root, { prefill, navigate }) {
     $('#nt-split-row').hidden = form.type === 'income';
     if ($('#nt-payer-row')) $('#nt-payer-row').hidden = form.type === 'income';
     if (form.type === 'income') { form.split = 1; form.paidBy = ''; }
+    $('#nt-loc-row').hidden = form.type === 'income';
     renderPayer();
+    renderLoc();
     $('#nt-cats').innerHTML = categoriesOf(form.type).map((c) => `
       <button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${c.id === form.category}">
         <span class="cat-ico">${icon(c.icon)}</span><span>${esc(c.name)}</span>
@@ -240,6 +260,28 @@ export function render(root, { prefill, navigate }) {
     if (row) row.hidden = Boolean(form.paidBy);
     root.querySelectorAll('[data-payer]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.payer === form.paidBy)));
     renderHint();
+  }
+
+  /** Ubicación del gasto: viene del Atajo o se pide al GPS si el interruptor está activo. */
+  function renderLoc() {
+    const notes = { off: '', loading: 'Obteniendo…', ok: form.locFromShortcut ? 'Del pago' : 'Guardada', denied: 'Sin permiso', error: 'No disponible' };
+    $('#nt-loc').checked = ['ok', 'loading'].includes(form.locState);
+    $('#nt-loc-note').textContent = notes[form.locState];
+  }
+
+  function requestLocation() {
+    if (!navigator.geolocation) { form.locState = 'error'; return renderLoc(); }
+    form.locState = 'loading';
+    renderLoc();
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        form.location = validLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        form.locState = form.location ? 'ok' : 'error';
+        renderLoc();
+      },
+      (err) => { form.location = null; form.locState = err.code === 1 ? 'denied' : 'error'; renderLoc(); },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
   }
 
   /** Nombres escritos en "Te deben" (como mucho, personas − 1). */
@@ -339,6 +381,12 @@ export function render(root, { prefill, navigate }) {
   }));
   $('#nt-debtors')?.addEventListener('input', renderHint);
 
+  $('#nt-loc').addEventListener('change', (e) => {
+    setSetting('saveLocation', e.target.checked); // se recuerda para los siguientes gastos
+    if (e.target.checked) { form.locFromShortcut = false; requestLocation(); }
+    else { form.location = null; form.locState = 'off'; form.locFromShortcut = false; renderLoc(); }
+  });
+
   // Gasto compartido: entre 1 (solo yo) y 20 personas.
   root.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {
     form.split = Math.min(20, Math.max(1, form.split + Number(b.dataset.step)));
@@ -369,6 +417,7 @@ export function render(root, { prefill, navigate }) {
       tags: $('#nt-tags').value,
       split: form.split,
       paidBy: form.paidBy,
+      location: form.type === 'expense' && form.locState === 'ok' ? form.location : null,
       currency: form.currency,
       originalAmount: form.amount,
       fxRate: form.rate,
@@ -392,6 +441,8 @@ export function render(root, { prefill, navigate }) {
   renderType();
   validate();
   if (form.currency !== 'EUR') updateRate();
+  // Si el usuario lo dejó activado, pedimos la ubicación al abrir (salvo que venga del Atajo).
+  if (!form.location && form.type === 'expense' && getState().settings.saveLocation) requestLocation();
 
   return () => document.body.classList.remove('is-modal');
 }

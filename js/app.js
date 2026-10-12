@@ -6,14 +6,15 @@ import * as nuevo from './views/nuevo-gasto.js';
 import * as patrimonio from './views/patrimonio.js';
 import * as ajustes from './views/ajustes.js';
 import * as analisis from './views/analisis.js';
+import * as mapa from './views/mapa.js';
 import { readPrefillFromURL } from './views/nuevo-gasto.js';
 import { getState, setSetting, runRecurring } from './store.js';
 import { snapshotNetWorth } from './networth.js';
 import { toast, icon } from './ui.js';
 
-const routes = { inicio: dashboard, movimientos, nuevo, patrimonio, ajustes, analisis };
+const routes = { inicio: dashboard, movimientos, nuevo, patrimonio, ajustes, analisis, mapa };
 // Vistas sin pestaña propia: resaltan la pestaña de la que cuelgan.
-const TAB_OF = { analisis: 'inicio' };
+const TAB_OF = { analisis: 'inicio', mapa: 'inicio' };
 const viewEl = document.getElementById('view');
 let cleanup = null;
 

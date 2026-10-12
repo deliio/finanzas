@@ -138,6 +138,9 @@ export function addTransaction(tx, { silent = false } = {}) {
     Object.assign(record, { currency: tx.currency, originalAmount: round2(tx.originalAmount), fxRate: tx.fxRate });
   }
   if (tx.recurringId) record.recurringId = tx.recurringId;
+  // Dónde se pagó (mapa de calor): solo gastos y coordenadas válidas.
+  const loc = validLocation(tx.location);
+  if (loc && record.type === 'expense') record.location = loc;
   // Pagado por otra persona: cuenta como gasto, pero no sale de ninguna cuenta.
   if (tx.paidBy && record.type === 'expense') { record.paidBy = tx.paidBy; record.account = ''; }
 
@@ -169,6 +172,16 @@ export function availableMonths() {
   const set = new Set(state.transactions.map((t) => t.date.slice(0, 7)));
   set.add(todayISO().slice(0, 7));
   return [...set].sort().reverse();
+}
+
+/* ---------- Ubicación ------------------------------------------------- */
+
+/** { lat, lon } con 5 decimales (~1 m) o null si no son coordenadas válidas. */
+export function validLocation(l) {
+  if (!l) return null;
+  const lat = Number(l.lat), lon = Number(l.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return null;
+  return { lat: Math.round(lat * 1e5) / 1e5, lon: Math.round(lon * 1e5) / 1e5 };
 }
 
 /* ---------- Etiquetas ------------------------------------------------- */

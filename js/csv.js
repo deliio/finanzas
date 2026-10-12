@@ -98,7 +98,7 @@ export function powerBIFiles(state, { estimateHolding } = {}) {
     'transaccion_id', 'fecha', 'anio', 'mes', 'anio_mes', 'trimestre', 'dia_semana',
     'tipo', 'importe_eur', 'importe_con_signo', 'categoria_id', 'categoria', 'concepto',
     'cuenta_id', 'cuenta', 'etiquetas', 'num_etiquetas', 'dividido_entre', 'pagado_por', 'divisa_original',
-    'importe_original', 'tipo_cambio', 'recurrente', 'creado_en',
+    'importe_original', 'tipo_cambio', 'recurrente', 'latitud', 'longitud', 'creado_en',
   ]];
   for (const t of [...state.transactions].sort((a, b) => a.date.localeCompare(b.date))) {
     const d = new Date(t.date + 'T00:00:00');
@@ -108,7 +108,7 @@ export function powerBIFiles(state, { estimateHolding } = {}) {
       t.category, categoryById(t.category).name, t.description,
       t.account || '', accountName[t.account] ?? '', (t.tags || []).join('|'), (t.tags || []).length,
       t.split === true ? 2 : (t.split || 1), t.paidBy ? payerById(t.paidBy).name : '', t.currency || 'EUR', num(t.originalAmount ?? t.amount), t.fxRate ?? 1,
-      t.recurringId ? 1 : 0, t.createdAt,
+      t.recurringId ? 1 : 0, t.location?.lat ?? '', t.location?.lon ?? '', t.createdAt,
     ]);
   }
 

@@ -545,3 +545,26 @@ button.ring-card:active { transform: scale(0.97); }
 .note-date { font-size: 12.5px; font-weight: 500; align-self: flex-start; margin-top: 2px; }
 .note-area { min-height: 180px; font-size: 16px; }
 .row.is-paused .trail { color: var(--text-2); }
+
+/* ---------- v14: mapa de gastos ---------------------------------------- */
+.map-box {
+  position: relative; height: 380px; border-radius: var(--radius-lg); overflow: hidden;
+  background: #0d0d0d; isolation: isolate;
+}
+.map-loading { position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; }
+.map-box .leaflet-container { background: #0d0d0d; font: inherit; }
+.map-box .leaflet-control-attribution {
+  background: rgba(0, 0, 0, .55) !important; color: #8e8e93 !important; font-size: 9.5px; border-radius: 6px 0 0 0;
+}
+.map-box .leaflet-control-attribution a { color: #8e8e93 !important; }
+.map-cta { display: flex; align-items: center; gap: 12px; margin: 12px 0 0; color: inherit; padding: 14px 16px; }
+.map-cta .icon { width: 42px; height: 42px; border-radius: 50%; background: var(--card-2); display: grid; place-items: center; flex: none; }
+.map-cta .main { flex: 1; min-width: 0; }
+.map-cta .title { font-weight: 600; }
+.map-cta .subtitle { font-size: 13px; color: var(--text-2); margin-top: 1px; }
+.map-cta .ico { width: 20px; height: 20px; }
+.map-link { color: var(--blue); }
+body.privacy .map-box { filter: blur(10px); }
+
+/* Mapa base de OpenStreetMap en modo oscuro (el calor y los puntos no se ven afectados) */
+.map-box .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.35); }
