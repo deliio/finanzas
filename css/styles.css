@@ -532,3 +532,16 @@ button.ring-card:active { transform: scale(0.97); }
 .stepper button:active:not(:disabled) { transform: scale(0.9); background: var(--text); color: #000; }
 .stepper button:disabled { opacity: .3; }
 .stepper-val { min-width: 18px; text-align: center; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- v13: "Lo paga", Me deben y Notas -------------------------- */
+.pill-choice { display: flex; gap: 6px; flex: 1; justify-content: flex-end; flex-wrap: wrap; padding: 8px 0; }
+.pill-choice button {
+  padding: 6px 12px; border-radius: 999px; background: var(--card-2); color: var(--text-2);
+  font-size: 14px; font-weight: 600; transition: background .15s, color .15s;
+}
+.pill-choice button[aria-pressed="true"] { background: var(--text); color: #000; }
+.note-preview { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
+.note-row .main { padding-right: 6px; }
+.note-date { font-size: 12.5px; font-weight: 500; align-self: flex-start; margin-top: 2px; }
+.note-area { min-height: 180px; font-size: 16px; }
+.row.is-paused .trail { color: var(--text-2); }

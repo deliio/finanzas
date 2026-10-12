@@ -1,6 +1,6 @@
 // Cálculo centralizado del patrimonio (lo usan Patrimonio, el histórico y las gráficas).
 
-import { getState, accountValue, recordSnapshot } from './store.js';
+import { getState, accountValue, recordSnapshot, openDebts, debtRemaining } from './store.js';
 import { portfolioSummary } from './market.js';
 
 export function computeNetWorth() {
@@ -10,7 +10,9 @@ export function computeNetWorth() {
 
   const liquidez = sum('liquidez');
   const inversiones = funds.value;
-  const activos = sum('activo') + inversiones;
+  // Lo que te deben sigue siendo tuyo: cuenta como activo.
+  const meDeben = openDebts().reduce((s, d) => s + debtRemaining(d), 0);
+  const activos = sum('activo') + inversiones + meDeben;
   const deudas = sum('deuda');
   const net = liquidez + activos - deudas;
 
@@ -18,7 +20,7 @@ export function computeNetWorth() {
   const pendiente = pending.reduce((s, p) => s + p.amount, 0);
 
   return {
-    liquidez, activos, inversiones, deudas, net, funds,
+    liquidez, activos, inversiones, deudas, net, funds, meDeben,
     enHuchas,
     disponible: liquidez - enHuchas, // liquidez no reservada en huchas
     pendiente,

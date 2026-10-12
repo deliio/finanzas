@@ -2,7 +2,7 @@
 // sin depender de presupuestos (#7), análisis por etiquetas (#9) y widget
 // "Estilo de vida" (#15).
 
-import { getState, categoryById, categoriesOf, availableMonths, transactionsSorted, setSetting, DEFAULT_LIFESTYLE, todayISO, prevMonthKey, bucketOf, PAPI } from '../store.js';
+import { getState, categoryById, categoriesOf, availableMonths, transactionsSorted, setSetting, DEFAULT_LIFESTYLE, todayISO, prevMonthKey, bucketOf } from '../store.js';
 import { money, esc, icon, privacyButton, monthSelect, getSelectedMonth, setSelectedMonth, monthShort, openSheet, txRow, toast } from '../ui.js';
 import { barChart, spendingDonuts } from '../charts.js';
 import { openTxSheet } from './movimientos.js';
@@ -25,7 +25,7 @@ export function render(root) {
     const total = expenses.reduce((s, t) => s + t.amount, 0);
 
     // Por categoría (todas, aunque no tengan presupuesto).
-    // Lo pagado por papi va a su propio grupo (como una categoría más).
+    // Lo que te paga otra persona va a su propio grupo (como una categoría más).
     const byCat = groupSum(expenses, (t) => [bucketOf(t)]);
     const catRows = categoriesOf('expense')
       .map((c) => ({ c, ...(byCat[c.id] || { sum: 0, count: 0 }) }))
@@ -157,7 +157,7 @@ export function openTracker({ kind, id }, onDone) {
     <div class="card" style="margin-top:12px">
       ${barChart(months6.map((m, i) => ({ label: monthShort(m), value: sumWhere((t) => t.date.startsWith(m)), highlight: i === 5 })))}
     </div>
-    ${id === PAPI.id ? papiBreakdown(list, today.slice(0, 7)) : ''}
+    ${categoryById(id).payerId ? payerBreakdown(list, today.slice(0, 7)) : ''}
     <div class="section-title">Últimos movimientos</div>
     ${list.length ? `<div class="list">${list.slice(0, 15).map((t) => txRow(t, categoryById(t.category))).join('')}</div>`
       : '<div class="card empty">Sin gastos todavía</div>'}
@@ -169,8 +169,8 @@ export function openTracker({ kind, id }, onDone) {
   });
 }
 
-/** Qué te ha pagado papi este mes, por categoría real. */
-function papiBreakdown(list, monthKey) {
+/** Qué te ha pagado esa persona este mes, por categoría real. */
+function payerBreakdown(list, monthKey) {
   const month = list.filter((t) => t.date.startsWith(monthKey));
   const byCat = groupSum(month, (t) => [t.category]);
   const rows = Object.entries(byCat).sort((a, b) => b[1].sum - a[1].sum);

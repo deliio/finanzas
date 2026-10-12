@@ -1,7 +1,8 @@
 // Dashboard: resumen del mes elegido (Time Travel), presupuestos, gasto por
 // categoría y últimos movimientos.
 
-import { transactionsInMonthKey, transactionsSorted, categoryById, categoriesOf, availableMonths, bucketOf, PAPI } from '../store.js';
+import { transactionsInMonthKey, transactionsSorted, categoryById, categoriesOf, availableMonths, bucketOf,
+  payerById, payerBucketId, openDebts, debtRemaining } from '../store.js';
 import { money, ring, txRow, esc, icon, privacyButton, monthSelect, getSelectedMonth, setSelectedMonth, isCurrentMonth, monthLabel } from '../ui.js';
 import { spendingDonuts } from '../charts.js';
 import { pastePayment } from './nuevo-gasto.js';
@@ -23,8 +24,13 @@ export function render(root, { navigate }) {
     const spentByCat = {};
     monthTx.filter((t) => t.type === 'expense')
       .forEach((t) => (spentByCat[bucketOf(t)] = (spentByCat[bucketOf(t)] || 0) + t.amount));
-    const papiList = monthTx.filter((t) => t.papi);
-    const papiTotal = sum(papiList);
+    // Lo que te han pagado otras personas este mes, agrupado por persona.
+    const byPayer = {};
+    monthTx.filter((t) => t.type === 'expense' && t.paidBy).forEach((t) => (byPayer[t.paidBy] ??= []).push(t));
+    const payerRows = Object.entries(byPayer).map(([id, list]) => ({ id, name: payerById(id).name, list, total: sum(list) }));
+    const debts = openDebts();
+    const owed = debts.reduce((s, d) => s + debtRemaining(d), 0);
+    const owers = new Set(debts.map((d) => d.person));
 
     const budgets = categoriesOf('expense').filter((c) => c.budget > 0);
     const latest = transactionsSorted(monthTx).slice(0, 5);
@@ -53,7 +59,7 @@ export function render(root, { navigate }) {
           <div class="pill-stat">
             <div class="label"><span class="dot" style="background:var(--red)"></span>Gastos</div>
             <div class="value num neg">−${money(expense)}</div>
-            ${papiTotal ? `<div class="papi-sub">${icon('user')} Papi <span class="num">${money(papiTotal)}</span></div>` : ''}
+            ${payerRows.map((p) => `<div class="papi-sub">${icon('user')} ${esc(p.name)} <span class="num">${money(p.total)}</span></div>`).join('')}
           </div>
         </div>
       </section>
@@ -69,13 +75,21 @@ export function render(root, { navigate }) {
         </button>`;
       }).join('')}</div>` : `<a class="card empty" href="#/ajustes" style="display:block">Sin presupuestos · Toca para definirlos en Ajustes</a>`}
 
-      ${papiTotal ? `<div class="section-title">Pagado por papi</div>
-      <div class="list"><button class="row" data-papi>
-        <span class="icon">${icon(PAPI.icon)}</span>
-        <span class="main"><div class="title">Este mes te ha pagado</div>
-          <div class="subtitle">${papiList.length} gasto${papiList.length === 1 ? '' : 's'} · no restan de tus cuentas</div></span>
-        <span class="trail num">${money(papiTotal)}</span>
-      </button></div>` : ''}
+      ${owed > 0 ? `<div class="section-title">Me deben <a href="#/patrimonio">Ver</a></div>
+      <div class="list"><a class="row" href="#/patrimonio">
+        <span class="icon">${icon('inbox')}</span>
+        <span class="main"><div class="title">${[...owers].slice(0, 3).map(esc).join(', ')}${owers.size > 3 ? '…' : ''}</div>
+          <div class="subtitle">${debts.length} deuda${debts.length === 1 ? '' : 's'} pendiente${debts.length === 1 ? '' : 's'}</div></span>
+        <span class="trail num pos">${money(owed)}</span>
+      </a></div>` : ''}
+
+      ${payerRows.length ? `<div class="section-title">Te han pagado</div>
+      <div class="list">${payerRows.map((p) => `<button class="row" data-payer-bucket="${esc(payerBucketId(p.id))}">
+        <span class="icon">${icon('user')}</span>
+        <span class="main"><div class="title">${esc(p.name)}</div>
+          <div class="subtitle">${p.list.length} gasto${p.list.length === 1 ? '' : 's'} · no restan de tus cuentas</div></span>
+        <span class="trail num">${money(p.total)}</span>
+      </button>`).join('')}</div>` : ''}
 
       <div class="section-title">Gasto por categoría <a href="#/analisis">Análisis</a></div>
       ${spendingDonuts(monthTx.filter((t) => t.type === 'expense'), { href: '#/analisis' })}
@@ -94,7 +108,8 @@ export function render(root, { navigate }) {
   };
 
   root.addEventListener('click', (e) => {
-    if (e.target.closest('[data-papi]')) return openTracker({ kind: 'cat', id: PAPI.id }, draw);
+    const payerBtn = e.target.closest('[data-payer-bucket]');
+    if (payerBtn) return openTracker({ kind: 'cat', id: payerBtn.dataset.payerBucket }, draw);
     const ringCard = e.target.closest('[data-budget]');
     if (ringCard) return openBudgetSheet(ringCard.dataset.budget, draw);
     const row = e.target.closest('[data-tx]');

@@ -2,7 +2,7 @@
 // Devuelven strings HTML/SVG para insertar con innerHTML.
 
 import { money, esc } from './ui.js';
-import { getState, categoryById } from './store.js';
+import { getState, categoryById, payerById } from './store.js';
 
 // Paleta: blanco + acentos iOS. El orden se mantiene estable entre gráficas.
 export const PALETTE = ['#ffffff', '#32d74b', '#0a84ff', '#ff9f0a', '#bf5af2', '#ff375f', '#64d2ff', '#ffd60a', '#8e8e93', '#5e5ce6'];
@@ -32,7 +32,7 @@ const legend = (segs) => `<div class="donut-legend">${segs.map((s) => `
 </div>`;
 
 /**
- * Gasto por categoría: tus gastos y, si los hay, al lado lo que ha pagado papi.
+ * Gasto por categoría: tus gastos y, al lado, lo que te ha pagado cada persona (si lo hay).
  * expenses: lista de movimientos de tipo gasto del periodo.
  */
 export function spendingDonuts(expenses, { href = '' } = {}) {
@@ -40,11 +40,12 @@ export function spendingDonuts(expenses, { href = '' } = {}) {
   const attrs = href ? ` href="${href}"` : '';
   if (!expenses.length) return '<div class="card empty">Sin gastos en este periodo</div>';
 
-  const own = expenses.filter((t) => !t.papi);
-  const papi = expenses.filter((t) => t.papi);
+  const own = expenses.filter((t) => !t.paidBy);
+  const byPayer = {};
+  expenses.filter((t) => t.paidBy).forEach((t) => (byPayer[t.paidBy] ??= []).push(t));
 
-  // Sin gastos de papi: un único gráfico con la leyenda al lado.
-  if (!papi.length) {
+  // Nadie te ha pagado nada: un único gráfico con la leyenda al lado.
+  if (!Object.keys(byPayer).length) {
     const segs = segmentsOf(own, 5);
     return `<${tag} class="card donut-card"${attrs}>
       ${donut(segs, { size: 132, thickness: 16, centerLabel: 'Gastado' })}
@@ -62,7 +63,7 @@ export function spendingDonuts(expenses, { href = '' } = {}) {
   };
   return `<${tag} class="card donut-pair"${attrs}>
     ${col('Tus gastos', own, 'Tú')}
-    ${col('Pagado por papi', papi, 'Papi')}
+    ${Object.entries(byPayer).map(([id, list]) => col(`Pagado por ${esc(payerById(id).name)}`, list, payerById(id).name)).join('')}
   </${tag}>`;
 }
 

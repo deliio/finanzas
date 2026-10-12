@@ -1,7 +1,7 @@
 // Lista completa de movimientos agrupada por día, con buscador universal.
 // Busca por concepto, categoría, #etiqueta o importe ("23,40", "23.4", ">100").
 
-import { getState, transactionsSorted, categoryById, deleteTransaction } from '../store.js';
+import { getState, transactionsSorted, categoryById, deleteTransaction, payerById, debtRemaining, deleteDebt } from '../store.js';
 import { txRow, dayLabel, toast, esc, money, signedMoney, icon, privacyButton, openSheet, amountToInput, currencySymbol, parseAmount, shortDate, splitCount } from '../ui.js';
 
 let lastQuery = '';   // se conserva al cambiar de pestaña
@@ -89,7 +89,7 @@ function matchTerm(t, term) {
     if (String(Math.floor(t.amount)).startsWith(term)) return true;
   }
   // (La cuenta no entra en la búsqueda: "BBVA nómina" haría coincidir todo con "nómina".)
-  const haystack = norm([t.description, categoryById(t.category).name, t.note, t.papi ? 'papi' : '', ...(t.tags || [])].join(' '));
+  const haystack = norm([t.description, categoryById(t.category).name, t.note, t.paidBy ? payerById(t.paidBy).name : '', ...(t.tags || [])].join(' '));
   return haystack.includes(norm(term));
 }
 
@@ -101,6 +101,7 @@ export function openTxSheet(id, onDone) {
   const cat = categoryById(t.category);
   const account = getState().accounts.find((a) => a.id === t.account);
   const recurring = t.recurringId && getState().recurring.find((r) => r.id === t.recurringId);
+  const linked = getState().debts.filter((d) => d.txId === t.id);
 
   const rows = [
     ['Importe', `<span class="num ${t.type === 'income' ? 'pos' : 'neg'}">${signedMoney(t.amount, t.type)}</span>`],
@@ -108,7 +109,8 @@ export function openTxSheet(id, onDone) {
     ['Categoría', esc(cat.name)],
     account && ['Cuenta', esc(account.name)],
     t.currency && ['Importe original', `<span class="num">${amountToInput(t.originalAmount)} ${currencySymbol(t.currency)}</span> · 1 ${currencySymbol(t.currency)} = ${String(t.fxRate).replace('.', ',')} €`],
-    t.papi && ['Pagado por', 'Papi · no resta de tus cuentas'],
+    t.paidBy && ['Pagado por', `${esc(payerById(t.paidBy).name)} · no resta de tus cuentas`],
+    linked.length && ['Te deben', linked.map((d) => `${esc(d.person)} <span class="num">${money(debtRemaining(d))}</span>`).join(' · ')],
     t.split && ['Compartido', `Entre ${splitCount(t)} · guardada tu parte`],
     recurring && ['Recurrente', `${esc(recurring.name)} · día ${recurring.day}`],
     t.tags?.length && ['Etiquetas', t.tags.map((x) => `#${esc(x)}`).join(' ')],
@@ -121,7 +123,9 @@ export function openTxSheet(id, onDone) {
     <button class="btn" type="button" data-close>Cerrar</button>
   `);
   el.querySelector('#tx-del').addEventListener('click', () => {
-    if (!confirm('¿Eliminar este movimiento?')) return;
+    if (!confirm(linked.length ? '¿Eliminar este movimiento? También se quitarán las deudas sin pagos asociadas.' : '¿Eliminar este movimiento?')) return;
+    // Las deudas creadas al dividir este gasto se van con él (salvo que ya tengan pagos).
+    linked.filter((d) => !d.payments.length).forEach((d) => deleteDebt(d.id));
     deleteTransaction(t.id);
     close();
     toast('Movimiento eliminado');

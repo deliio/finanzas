@@ -2,7 +2,8 @@
 // Incluye evolución histórica (#10), huchas (#13) y cobros pendientes (#14).
 
 import { getState, addAccount, updateAccount, deleteAccount, accountValue, accountBreakdown, addHolding, updateHolding, deleteHolding, setMarketData, round2, todayISO,
-  addGoal, updateGoal, deleteGoal, addPending, deletePending, addTransaction, categoriesOf } from '../store.js';
+  addGoal, updateGoal, deleteGoal, addPending, deletePending, addTransaction, categoriesOf,
+  openDebts, debtRemaining, debtPaid, addDebt, addDebtPayment, deleteDebt, knownDebtors, saveNote, deleteNote } from '../store.js';
 import { MIRROR_PRESETS, hasApiKey, fetchQuote, fetchEurUsd, refreshMarket, estimateHolding } from '../market.js';
 import { computeNetWorth, snapshotNetWorth } from '../networth.js';
 import { money, esc, parseAmount, toast, icon, usd, signedPct, signedEur, tone, openSheet, privacyButton, shortDate } from '../ui.js';
@@ -59,7 +60,8 @@ export function render(root) {
           <span><i class="dot" style="background:${KINDS.activo.color}"></i>Activos <span class="num">${money(n.activos, { decimals: false })}</span></span>
           <span><i class="dot" style="background:var(--red)"></i>Deudas <span class="num">${money(n.deudas, { decimals: false })}</span></span>
         </div>
-        ${n.enHuchas || n.pendiente ? `<div class="hero-extra">
+        ${n.enHuchas || n.pendiente || n.meDeben ? `<div class="hero-extra">
+          ${n.meDeben ? `<div><span class="muted">Te deben (incluido en activos)</span><span class="num pos">${money(n.meDeben)}</span></div>` : ''}
           ${n.enHuchas ? `<div><span class="muted">Disponible (sin huchas)</span><span class="num">${money(n.disponible)}</span></div>` : ''}
           ${n.pendiente ? `<div><span class="muted">Proyección con cobros pendientes</span><span class="num">${money(n.proyeccion)}</span></div>` : ''}
         </div>` : ''}
@@ -100,6 +102,12 @@ export function render(root) {
           <span class="trail num pos">+${money(p.amount)}</span>
         </button>`).join('')}</div>`
         : `<div class="card empty" style="padding:18px">Becas, devoluciones de Hacienda… Se suman a la proyección, no a tu liquidez.</div>`}
+
+      <div class="section-title">Me deben <button class="link-btn" data-action="add-debt">+ Añadir</button></div>
+      ${debtsHtml()}
+
+      <div class="section-title">Notas <button class="link-btn" data-action="add-note">+ Nota</button></div>
+      ${notesHtml()}
 
       ${Object.entries(KINDS).map(([kind, k]) => {
         const list = accounts.filter((a) => a.kind === kind);
@@ -159,6 +167,15 @@ export function render(root) {
     if (action === 'add-fund') return openAddFund(draw);
     if (action === 'add-goal') return openGoalForm(null, draw);
     if (action === 'add-pending') return openPendingForm(draw);
+    if (action === 'add-debt') return openDebtForm(draw);
+    if (action === 'add-note') return openNote(null, draw);
+    if (action === 'toggle-settled') { showSettled = !showSettled; return draw(); }
+
+    const debt = e.target.closest('[data-debt]');
+    if (debt) return openDebt(debt.dataset.debt, draw);
+
+    const note = e.target.closest('[data-note]');
+    if (note) return openNote(note.dataset.note, draw);
 
     const fund = e.target.closest('[data-fund]');
     if (fund) return openFund(fund.dataset.fund, draw);
@@ -598,5 +615,161 @@ function openPending(id, onDone) {
   el.querySelector('#pc-del').addEventListener('click', () => {
     if (!confirm(`¿Eliminar ${p.name} de la previsión?`)) return;
     deletePending(p.id); close(); onDone();
+  });
+}
+
+
+/* ---------- Me deben -------------------------------------------------- */
+
+const dateFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
+const shortAt = (iso) => dateFmt.format(new Date(iso));
+let showSettled = false;
+
+function debtsHtml() {
+  const open = openDebts();
+  const settled = getState().debts.filter((d) => debtRemaining(d) <= 0);
+  const total = open.reduce((s, d) => s + debtRemaining(d), 0);
+  const row = (d) => {
+    const rem = debtRemaining(d), paid = debtPaid(d);
+    return `<button class="row ${rem <= 0 ? 'is-paused' : ''}" data-debt="${esc(d.id)}">
+      <span class="icon">${icon('inbox')}</span>
+      <span class="main">
+        <div class="title">${esc(d.person)}</div>
+        <div class="subtitle">${esc(d.concept || 'Préstamo')} · ${shortAt(d.createdAt)}${paid > 0 && rem > 0 ? ` · pagado <span class="num">${money(paid)}</span> de <span class="num">${money(d.amount)}</span>` : ''}</div>
+        ${paid > 0 && rem > 0 ? progress(paid / d.amount, { color: 'var(--green)' }) : ''}
+      </span>
+      <span class="trail num ${rem > 0 ? 'pos' : 'muted'}">${rem > 0 ? money(rem) : 'Pagado'}</span>
+    </button>`;
+  };
+  if (!open.length && !settled.length) {
+    return '<div class="card empty" style="padding:18px">Cuando dividas un gasto, escribe quién te debe su parte y aparecerá aquí. También puedes añadir préstamos a mano.</div>';
+  }
+  return `${open.length ? `<div class="list">${open.map(row).join('')}</div>
+      <p class="hint" style="margin:8px 4px 0">Total pendiente: <span class="num">${money(total)}</span> · cuenta en tu patrimonio como activo.</p>`
+      : '<div class="card empty" style="padding:18px">Nadie te debe nada 🎉</div>'}
+    ${settled.length ? `<button class="link-btn" data-action="toggle-settled" style="margin:10px 4px 0">${showSettled ? 'Ocultar' : 'Ver'} saldadas (${settled.length})</button>
+      ${showSettled ? `<div class="list" style="margin-top:8px">${settled.map(row).join('')}</div>` : ''}` : ''}`;
+}
+
+function accountOptions(selected = '') {
+  const accounts = getState().accounts.filter((a) => a.kind === 'liquidez');
+  return accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === selected ? 'selected' : ''}>${esc(a.name)}</option>`).join('')
+    + `<option value="" ${selected ? '' : 'selected'}>Ninguna</option>`;
+}
+
+function openDebtForm(onDone) {
+  const last = getState().settings.lastAccount || '';
+  const { el, close } = openSheet(`
+    <h3 class="sheet-title">Alguien te debe</h3>
+    <form id="d-form">
+      <div class="field-group">
+        <div class="field"><label for="d-person">Persona</label>
+          <input id="d-person" required list="d-people" placeholder="Nombre" autocomplete="off">
+          <datalist id="d-people">${knownDebtors().map((n) => `<option value="${esc(n)}">`).join('')}</datalist></div>
+        <div class="field"><label for="d-amount">Importe</label>
+          <input id="d-amount" inputmode="decimal" required placeholder="0,00 €"></div>
+        <div class="field"><label for="d-concept">Concepto</label>
+          <input id="d-concept" placeholder="Cena, entradas, préstamo…"></div>
+        <div class="field"><label for="d-acc">Salió de</label>
+          <select id="d-acc">${accountOptions(last)}</select></div>
+      </div>
+      <p class="hint" style="margin-top:-8px">"Salió de": la cuenta de la que pagaste o prestaste ese dinero (se descuenta de ella). Elige "Ninguna" si ya lo tenías apuntado.</p>
+      <button class="btn btn-primary" type="submit">Guardar</button>
+      <button class="btn" type="button" data-close>Cancelar</button>
+    </form>
+  `);
+  el.querySelector('#d-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const amount = parseAmount(el.querySelector('#d-amount').value);
+    if (!(amount > 0)) return toast('Importe no válido');
+    addDebt({ person: el.querySelector('#d-person').value, amount, concept: el.querySelector('#d-concept').value, account: el.querySelector('#d-acc').value });
+    close(); toast('Deuda añadida'); onDone();
+  });
+}
+
+function openDebt(id, onDone) {
+  const d = getState().debts.find((x) => x.id === id);
+  if (!d) return;
+  const rem = debtRemaining(d);
+  const last = getState().settings.lastAccount || '';
+  const { el, close } = openSheet(`
+    <h3 class="sheet-title">${esc(d.person)}</h3>
+    <div class="goal-hero">
+      <div class="num" style="font-size:30px;font-weight:700">${rem > 0 ? money(rem) : 'Saldada'}</div>
+      <div class="muted">${esc(d.concept || 'Préstamo')} · ${rem > 0 ? `pendiente de ${money(d.amount)}` : `${money(d.amount)} cobrados`}</div>
+      ${progress(debtPaid(d) / d.amount, { color: 'var(--green)' })}
+    </div>
+    ${d.payments.length ? `<div class="list kv" style="margin-top:12px">${d.payments.map((p) => `
+      <div class="row"><span class="main">Pago · ${shortAt(p.at)}</span><span class="trail num pos">+${money(p.amount)}</span></div>`).join('')}</div>` : ''}
+    ${rem > 0 ? `
+    <div class="field-group" style="margin-top:14px">
+      <div class="field"><label for="dp-acc">Lo recibes en</label><select id="dp-acc">${accountOptions(d.account || last)}</select></div>
+    </div>
+    <form id="dp-form" class="inline-form">
+      <input id="dp-amount" inputmode="decimal" placeholder="¿Cuánto te ha pagado?">
+      <button class="btn" type="submit">Abonar</button>
+    </form>
+    <button class="btn btn-primary" type="button" id="dp-all" style="margin-top:12px">Ya ha pagado todo (${money(rem)})</button>` : ''}
+    <button class="btn btn-danger" type="button" id="d-del" style="margin-top:18px">Eliminar</button>
+    <button class="btn" type="button" data-close>Cerrar</button>
+  `);
+  const pay = (amount) => {
+    const got = addDebtPayment(d.id, amount, el.querySelector('#dp-acc').value);
+    if (!got) return toast('Importe no válido');
+    const left = debtRemaining(d);
+    close();
+    toast(left > 0 ? `Abonado ${money(got)} · quedan ${money(left)}` : `${d.person} ya no te debe nada 🎉`);
+    onDone();
+  };
+  el.querySelector('#dp-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const amount = parseAmount(el.querySelector('#dp-amount').value);
+    if (!(amount > 0)) return toast('Importe no válido');
+    if (amount > rem + 0.005) return toast(`Solo te debe ${money(rem)}`);
+    pay(amount);
+  });
+  el.querySelector('#dp-all')?.addEventListener('click', () => pay(rem));
+  el.querySelector('#d-del').addEventListener('click', () => {
+    if (!confirm(`¿Eliminar la deuda de ${d.person}?`)) return;
+    deleteDebt(d.id); close(); onDone();
+  });
+}
+
+/* ---------- Notas ------------------------------------------------------ */
+
+function notesHtml() {
+  const notes = [...getState().notes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  if (!notes.length) return '<div class="card empty" style="padding:18px">Apunta lo que necesites: ideas de ahorro, lo que te falta por pagar, recordatorios…</div>';
+  return `<div class="list">${notes.map((n) => {
+    const [first, ...rest] = n.text.trim().split('\n');
+    return `<button class="row note-row" data-note="${esc(n.id)}">
+      <span class="main">
+        <div class="title">${esc(first || 'Nota')}</div>
+        ${rest.join(' ').trim() ? `<div class="subtitle note-preview">${esc(rest.join(' ').trim())}</div>` : ''}
+      </span>
+      <span class="trail muted note-date">${shortAt(n.updatedAt)}</span>
+    </button>`;
+  }).join('')}</div>`;
+}
+
+function openNote(id, onDone) {
+  const n = id ? getState().notes.find((x) => x.id === id) : null;
+  const { el, close } = openSheet(`
+    <h3 class="sheet-title">${n ? 'Nota' : 'Nueva nota'}</h3>
+    <textarea id="n-text" class="area note-area" rows="8" placeholder="La primera línea será el título…">${esc(n?.text ?? '')}</textarea>
+    <button class="btn btn-primary" type="button" id="n-save" style="margin-top:12px">Guardar</button>
+    ${n ? '<button class="btn btn-danger" type="button" id="n-del">Eliminar</button>' : ''}
+    <button class="btn" type="button" data-close>Cancelar</button>
+  `);
+  const area = el.querySelector('#n-text');
+  if (!n) setTimeout(() => area.focus(), 300);
+  el.querySelector('#n-save').addEventListener('click', () => {
+    const text = area.value.trim();
+    if (!text) return toast('La nota está vacía');
+    saveNote(n?.id, text); close(); toast('Nota guardada'); onDone();
+  });
+  el.querySelector('#n-del')?.addEventListener('click', () => {
+    if (!confirm('¿Eliminar esta nota?')) return;
+    deleteNote(n.id); close(); onDone();
   });
 }

@@ -1,6 +1,7 @@
 // Helpers de presentación compartidos por las vistas.
 
 import { icon } from './icons.js';
+import { payerById } from './store.js';
 export { icon };
 
 const moneyFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
@@ -116,7 +117,7 @@ export const currencySymbol = (c) => CURRENCY_SYMBOL[c] ?? c;
 
 export function txRow(tx, cat) {
   const extras = [];
-  if (tx.papi) extras.push('<span class="papi-tag">Papi</span>');
+  if (tx.paidBy) extras.push(`<span class="papi-tag">${esc(payerById(tx.paidBy).name)}</span>`);
   if (tx.split) extras.push(`÷${splitCount(tx)}`);
   if (tx.currency) extras.push(`<span class="num">${amountToInput(tx.originalAmount)} ${currencySymbol(tx.currency)}</span>`);
   if (tx.recurringId) extras.push('fijo');

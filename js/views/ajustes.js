@@ -2,7 +2,7 @@
 // clave de Finnhub y borrado de datos.
 
 import { getState, replaceState, resetState, todayISO, setSetting, addRecurring, updateRecurring, deleteRecurring,
-  runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget } from '../store.js';
+  runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget, payers, payerById, addPayer, updatePayer, removePayer } from '../store.js';
 import { fetchQuote, estimateHolding } from '../market.js';
 import { stateToCSV, csvToState, powerBIFiles } from '../csv.js';
 import { toast, esc, usd, money, icon, openSheet, parseAmount, amountToInput } from '../ui.js';
@@ -19,7 +19,7 @@ export function render(root) {
       return `<button class="row ${r.active ? '' : 'is-paused'}" data-rec="${esc(r.id)}">
         <span class="icon">${icon(cat.icon)}</span>
         <span class="main"><div class="title">${esc(r.name)}</div>
-          <div class="subtitle">Día ${r.day} de cada mes · ${esc(cat.name)}${r.papi ? ' · <span class="papi-tag">Papi</span>' : ''}${r.active ? '' : ' · <strong>en pausa</strong>'}</div></span>
+          <div class="subtitle">Día ${r.day} de cada mes · ${esc(cat.name)}${r.paidBy ? ` · <span class="papi-tag">${esc(payerById(r.paidBy).name)}</span>` : ''}${r.active ? '' : ' · <strong>en pausa</strong>'}</div></span>
         <span class="trail num ${r.type === 'income' ? 'pos' : 'neg'}">${r.type === 'income' ? '+' : '−'}${money(r.amount)}</span>
       </button>`;
     }).join('')}</div>
@@ -33,7 +33,17 @@ export function render(root) {
         <span class="main"><div class="title">${esc(c.name)}</div></span>
         <span class="trail num ${c.budget > 0 ? '' : 'muted'}">${c.budget > 0 ? money(c.budget, { decimals: false }) : 'Sin límite'}</span>
       </button>`).join('')}</div>
-    <p class="hint" style="margin:8px 4px 0">Las categorías con presupuesto aparecen como anillos en Inicio. Lo que paga papi no cuenta.</p>
+    <p class="hint" style="margin:8px 4px 0">Las categorías con presupuesto aparecen como anillos en Inicio. Lo que te pagan otras personas no cuenta.</p>
+
+    <div class="section-title">Pagado por otras personas <button class="link-btn" data-action="add-payer">+ Añadir</button></div>
+    ${payers().length ? `<div class="list">${payers().map((p) => `
+      <button class="row" data-payer="${esc(p.id)}">
+        <span class="icon">${icon('user')}</span>
+        <span class="main"><div class="title">Pagado por ${esc(p.name)}</div>
+          <div class="subtitle">${((n) => `${n} gasto${n === 1 ? '' : 's'}`)(transactions.filter((t) => t.paidBy === p.id).length)}</div></span>
+        <span class="trail muted">${icon('chevron')}</span>
+      </button>`).join('')}</div>`
+      : `<div class="card empty" style="padding:18px">¿Alguien te paga algunos gastos (tu padre, tu pareja…)? Añádelo y al apuntar un gasto podrás elegir quién lo paga. Contará como gasto, pero no restará de tus cuentas, y tendrá su propia gráfica.</div>`}
 
     <div class="section-title">Copia de seguridad</div>
     <div class="card">
@@ -82,7 +92,10 @@ export function render(root) {
     const rec = e.target.closest('[data-rec]');
     if (rec) return openRecurringForm(rec.dataset.rec, () => render(root));
     const b = e.target.closest('[data-budget]');
-    if (b) openBudgetSheet(b.dataset.budget, () => render(root));
+    if (b) return openBudgetSheet(b.dataset.budget, () => render(root));
+    if (e.target.closest('[data-action="add-payer"]')) return openPayerSheet(null, () => render(root));
+    const p = e.target.closest('[data-payer]');
+    if (p) openPayerSheet(p.dataset.payer, () => render(root));
   };
 
   root.querySelector('#fh-save').addEventListener('click', async (e) => {
@@ -168,6 +181,39 @@ export function openBudgetSheet(categoryId, onDone) {
   el.querySelector('#b-clear')?.addEventListener('click', () => save(0));
 }
 
+/* ---------- Pagado por otras personas ---------------------------------- */
+
+function openPayerSheet(id, onDone) {
+  const p = id ? payerById(id) : null;
+  const count = p ? getState().transactions.filter((t) => t.paidBy === p.id).length : 0;
+  const { el, close } = openSheet(`
+    <h3 class="sheet-title">${p ? `Pagado por ${esc(p.name)}` : 'Añadir persona'}</h3>
+    <p class="muted" style="text-align:center;margin:-8px 0 16px;font-size:14px">
+      Sus gastos cuentan como gasto, pero no restan de tus cuentas ni de tu patrimonio.</p>
+    <form id="py-form">
+      <div class="field-group">
+        <div class="field"><label for="py-name">Nombre</label>
+          <input id="py-name" required maxlength="20" placeholder="Papi, Mami, Laura…" value="${esc(p?.name ?? '')}"></div>
+      </div>
+      <button class="btn btn-primary" type="submit">Guardar</button>
+      ${p ? '<button class="btn btn-danger" type="button" id="py-del">Quitar</button>' : ''}
+      <button class="btn" type="button" data-close>Cancelar</button>
+    </form>
+    ${p && count ? `<p class="hint" style="margin-top:12px">Si lo quitas, sus ${count} gastos se conservan con sus gráficas; solo deja de aparecer al apuntar gastos nuevos.</p>` : ''}
+  `);
+  el.querySelector('#py-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = el.querySelector('#py-name').value.trim();
+    if (!name) return;
+    if (p) updatePayer(p.id, { name }); else addPayer(name);
+    close(); toast(p ? 'Guardado' : `Añadido: ahora puedes marcar gastos pagados por ${name}`); onDone();
+  });
+  el.querySelector('#py-del')?.addEventListener('click', () => {
+    if (!confirm(`¿Quitar a ${p.name}?`)) return;
+    removePayer(p.id); close(); onDone();
+  });
+}
+
 /* ---------- Pagos recurrentes (#8) ------------------------------------- */
 
 function openRecurringForm(id, onDone) {
@@ -193,8 +239,10 @@ function openRecurringForm(id, onDone) {
         ${accounts.length ? `<div class="field"><label for="r-acc">Cuenta</label>
           <select id="r-acc">${accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === r?.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
             <option value="" ${r && !r.account ? 'selected' : ''}>Ninguna</option></select></div>` : ''}
-        <div class="field" id="r-papi-row"><label for="r-papi" class="wide">Pagado por papi</label><span class="field-note"></span>
-          <input id="r-papi" type="checkbox" class="switch" role="switch" ${r?.papi ? 'checked' : ''}></div>
+        ${payers().length ? `<div class="field" id="r-payer-row"><label for="r-payer">Lo paga</label>
+          <select id="r-payer"><option value="">Yo</option>
+            ${payers().map((p) => `<option value="${esc(p.id)}" ${p.id === r?.paidBy ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+          </select></div>` : ''}
         <div class="field"><label for="r-tags">Etiquetas</label>
           <input id="r-tags" placeholder="#suscripciones" autocapitalize="off" value="${esc((r?.tags || []).map((t) => '#' + t).join(' '))}"></div>
         ${r ? `<div class="field"><label for="r-active">Activo</label><span class="field-note"></span>
@@ -214,7 +262,7 @@ function openRecurringForm(id, onDone) {
     el.querySelectorAll('[data-rtype]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rtype === type)));
     const cats = categoriesOf(type);
     const selected = r?.type === type ? r.category : (type === 'expense' ? 'suscripciones' : 'nomina');
-    $('#r-papi-row').hidden = type === 'income';
+    if ($('#r-payer-row')) $('#r-payer-row').hidden = type === 'income';
     $('#r-cat').innerHTML = cats.map((c) => `<option value="${esc(c.id)}" ${c.id === selected ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
   };
   el.addEventListener('click', (e) => {
@@ -231,9 +279,9 @@ function openRecurringForm(id, onDone) {
     const data = {
       name: $('#r-name').value.trim(), type, amount: round2(amount), day,
       category: $('#r-cat').value, account: $('#r-acc')?.value ?? '', tags: normalizeTags($('#r-tags').value),
-      papi: type === 'expense' && $('#r-papi').checked,
+      paidBy: type === 'expense' ? ($('#r-payer')?.value ?? '') : '',
     };
-    if (data.papi) data.account = '';
+    if (data.paidBy) data.account = '';
     if (r) updateRecurring(r.id, { ...data, active: $('#r-active').checked });
     else addRecurring({ ...data, alreadyThisMonth: $('#r-done').checked });
     const added = runRecurring();

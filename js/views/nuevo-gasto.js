@@ -5,7 +5,8 @@
 // Extras opcionales: categoria, fecha (AAAA-MM-DD), etiquetas (#viajes,#comida), divisa (GBP|USD)
 // Portapapeles (PWA instalada): FINANZAS|<Importe>|<Comercio>  ·  INGRESO|<Importe>|<Origen>
 
-import { addTransaction, categoriesOf, todayISO, getState, setSetting, allTags, normalizeTags, round2 } from '../store.js';
+import { addTransaction, categoriesOf, todayISO, getState, setSetting, allTags, normalizeTags, round2,
+  payers, payerById, addDebt, knownDebtors, persist } from '../store.js';
 import { fetchRateToEur } from '../market.js';
 import { esc, parseAmount, amountToInput, toast, icon, money, currencySymbol } from '../ui.js';
 
@@ -120,7 +121,7 @@ export function render(root, { prefill, navigate }) {
     rate: 1,                             // € por 1 unidad de la divisa
     rateState: 'ok',                     // ok | loading | error
     split: 1,                            // nº de personas entre las que se divide (1 = no compartido)
-    papi: false,                         // lo paga papi: es gasto, pero no sale de tus cuentas
+    paidBy: '',                          // '' = lo pagas tú; si no, id de quien lo paga (no sale de tus cuentas)
     category: null,
   };
   // Cuenta: la última usada (si sigue existiendo) o la primera de liquidez.
@@ -134,6 +135,8 @@ export function render(root, { prefill, navigate }) {
   }
 
   const suggestedTags = allTags().slice(0, 8).map((t) => t.tag);
+  const payerList = payers();
+  const debtors = knownDebtors();
 
   root.innerHTML = `
     <div class="topbar">
@@ -183,11 +186,18 @@ export function render(root, { prefill, navigate }) {
           <button type="button" data-step="1" aria-label="Una persona más"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
         </div>
       </div>
-      <div class="field" id="nt-papi-row">
-        <label for="nt-papi" class="wide">Pagado por papi</label>
-        <span class="field-note" id="nt-papi-note"></span>
-        <input id="nt-papi" type="checkbox" class="switch" role="switch">
+      <div class="field" id="nt-debtors-row" hidden>
+        <label for="nt-debtors">Te deben</label>
+        <input id="nt-debtors" type="text" list="nt-debtors-list" placeholder="Nombres: Juan, Ana" autocomplete="off">
+        <datalist id="nt-debtors-list">${debtors.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
       </div>
+      ${payerList.length ? `<div class="field" id="nt-payer-row">
+        <label>Lo paga</label>
+        <div class="pill-choice" role="group" aria-label="Quién lo paga">
+          <button type="button" data-payer="" aria-pressed="true">Yo</button>
+          ${payerList.map((p) => `<button type="button" data-payer="${esc(p.id)}" aria-pressed="false">${esc(p.name)}</button>`).join('')}
+        </div>
+      </div>` : ''}
       <div class="field">
         <label for="nt-tags">Etiquetas</label>
         <input id="nt-tags" type="text" placeholder="#viajes #mecanica" autocomplete="off"
@@ -215,21 +225,26 @@ export function render(root, { prefill, navigate }) {
       b.setAttribute('aria-pressed', String(b.dataset.type === form.type)));
     // El gasto compartido solo tiene sentido en gastos.
     $('#nt-split-row').hidden = form.type === 'income';
-    $('#nt-papi-row').hidden = form.type === 'income';
-    if (form.type === 'income') { form.split = 1; form.papi = false; $('#nt-papi').checked = false; }
-    renderPapi();
+    if ($('#nt-payer-row')) $('#nt-payer-row').hidden = form.type === 'income';
+    if (form.type === 'income') { form.split = 1; form.paidBy = ''; }
+    renderPayer();
     $('#nt-cats').innerHTML = categoriesOf(form.type).map((c) => `
       <button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${c.id === form.category}">
         <span class="cat-ico">${icon(c.icon)}</span><span>${esc(c.name)}</span>
       </button>`).join('');
   }
 
-  /** Con "Pagado por papi" no se elige cuenta: el dinero no sale de ninguna. */
-  function renderPapi() {
+  /** Si lo paga otra persona no se elige cuenta: el dinero no sale de ninguna. */
+  function renderPayer() {
     const row = $('#nt-account-row');
-    if (row) row.hidden = form.papi;
-    $('#nt-papi-note').textContent = form.papi ? 'No resta' : '';
+    if (row) row.hidden = Boolean(form.paidBy);
+    root.querySelectorAll('[data-payer]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.payer === form.paidBy)));
+    renderHint();
   }
+
+  /** Nombres escritos en "Te deben" (como mucho, personas − 1). */
+  const debtorNames = () => [...new Set(($('#nt-debtors')?.value || '').split(/[,;]+/).map((s) => s.trim()).filter(Boolean))]
+    .slice(0, Math.max(0, form.split - 1));
 
   /** Importe final en € (divisa convertida y, si aplica, dividido entre las personas). */
   const finalEur = () => (form.amount ? round2(form.amount * form.rate / form.split) : 0);
@@ -243,6 +258,15 @@ export function render(root, { prefill, navigate }) {
     }
     if (form.amount && (form.split > 1 || form.currency !== 'EUR') && form.rateState === 'ok') {
       parts.push(`Se guardará <strong class="num">${money(finalEur())}</strong>${form.split > 1 ? ' (tu parte)' : ''}`);
+    }
+    const showDebtors = form.type === 'expense' && form.split > 1 && !form.paidBy;
+    if ($('#nt-debtors-row')) {
+      $('#nt-debtors-row').hidden = !showDebtors;
+      if (showDebtors && form.amount && form.rateState === 'ok') {
+        const n = debtorNames().length;
+        $('#nt-debtors').placeholder = `Nombres · ${money(finalEur())} c/u`;
+        if (n) parts.push(`${n === 1 ? 'Te debe' : 'Te deben'} <strong class="num">${money(finalEur() * n)}</strong>`);
+      }
     }
     $('#nt-hint').innerHTML = parts.join(' · ');
     $('#nt-split-n').textContent = form.split;
@@ -309,7 +333,11 @@ export function render(root, { prefill, navigate }) {
   });
   $('#nt-date').addEventListener('change', () => form.currency !== 'EUR' && updateRate());
 
-  $('#nt-papi').addEventListener('change', (e) => { form.papi = e.target.checked; renderPapi(); });
+  root.querySelectorAll('[data-payer]').forEach((b) => b.addEventListener('click', () => {
+    form.paidBy = b.dataset.payer;
+    renderPayer();
+  }));
+  $('#nt-debtors')?.addEventListener('input', renderHint);
 
   // Gasto compartido: entre 1 (solo yo) y 20 personas.
   root.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {
@@ -329,25 +357,33 @@ export function render(root, { prefill, navigate }) {
   saveBtn.addEventListener('click', () => {
     validate();
     if (saveBtn.disabled) return;
-    addTransaction({
+    const account = form.paidBy ? '' : ($('#nt-account')?.value ?? '');
+    const names = form.type === 'expense' && !form.paidBy ? debtorNames() : [];
+    const tx = addTransaction({
       type: form.type,
       amount: finalEur(),
       description: $('#nt-desc').value,
       category: form.category,
       date: $('#nt-date').value || todayISO(),
-      account: form.papi ? '' : ($('#nt-account')?.value ?? ''),
+      account,
       tags: $('#nt-tags').value,
       split: form.split,
-      papi: form.papi,
+      paidBy: form.paidBy,
       currency: form.currency,
       originalAmount: form.amount,
       fxRate: form.rate,
-    });
-    if ($('#nt-account') && !form.papi) setSetting('lastAccount', $('#nt-account').value);
+    }, { silent: names.length > 0 });
+    // Gasto dividido: cada persona nombrada te debe su parte (el dinero salió de tu cuenta).
+    names.forEach((person, i) => addDebt({ person, concept: tx.description || 'Gasto compartido', amount: finalEur(), account, txId: tx.id },
+      { silent: i < names.length - 1 }));
+    if ($('#nt-account') && !form.paidBy) setSetting('lastAccount', $('#nt-account').value);
     // Vaciamos el portapapeles para no registrar el mismo pago dos veces.
     if (prefill?.source === 'clipboard') navigator.clipboard?.writeText('').catch(() => {});
     if (navigator.vibrate) navigator.vibrate(10);
-    toast(form.type === 'income' ? 'Ingreso guardado' : form.papi ? 'Gasto guardado · lo paga papi' : 'Gasto guardado');
+    toast(form.type === 'income' ? 'Ingreso guardado'
+      : form.paidBy ? `Gasto guardado · lo paga ${payerById(form.paidBy).name}`
+      : names.length ? `Gasto guardado · ${names.join(', ')} te ${names.length > 1 ? 'deben' : 'debe'} su parte`
+      : 'Gasto guardado');
     navigate('inicio');
   });
 

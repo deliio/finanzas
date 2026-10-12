@@ -38,9 +38,9 @@ function normalizeCategories(categories) {
 
 function defaultState() {
   return {
-    version: 2,
+    version: 3,
     // { id, type: 'expense'|'income', amount (€), description, category, date: 'YYYY-MM-DD',
-    //   note, account, tags: [], split (nº personas), papi (lo paga papi), currency, originalAmount, fxRate, recurringId, createdAt }
+    //   note, account, tags: [], split (nº personas), paidBy (id de quien lo paga), currency, originalAmount, fxRate, recurringId, createdAt }
     transactions: [],
     categories: structuredClone(DEFAULT_CATEGORIES),
     accounts: [],     // { id, kind: 'liquidez'|'activo'|'deuda', name, balance, interestRate, updatedAt, syncedAt }
@@ -49,7 +49,12 @@ function defaultState() {
     goals: [],        // huchas: { id, name, target, saved, createdAt }
     pending: [],      // cobros pendientes: { id, name, amount, expectedDate }
     history: [],      // patrimonio diario: { date, liquidez, activos, inversiones, deudas, net }
-    settings: { currency: 'EUR', finnhubKey: '', privacy: false, lifestyle: { ...DEFAULT_LIFESTYLE } },
+    // Me deben: { id, person, concept, amount, account (de dónde salió el dinero), txId, createdAt,
+    //             payments: [{ id, amount, account, at }] }
+    debts: [],
+    notes: [],        // { id, text, createdAt, updatedAt }
+    // payers: personas que te pagan gastos (opcional): { id, name, archived }
+    settings: { currency: 'EUR', finnhubKey: '', privacy: false, lifestyle: { ...DEFAULT_LIFESTYLE }, payers: [] },
     quotes: {},       // caché de cotizaciones por ticker (no se exporta)
     fx: null,         // { rate: USD por 1 €, date, fetchedAt }
   };
@@ -76,11 +81,19 @@ function migrate(raw) {
   s.settings = { ...def.settings, ...raw.settings };
   s.categories = normalizeCategories(s.categories);
   s.transactions = s.transactions.map((t) => ({ tags: [], account: '', ...t }));
+  // v2 → v3: "Pagado por papi" pasa a ser un pagador configurable.
+  const hadPapi = s.transactions.some((t) => t.papi) || s.recurring.some((r) => r.papi);
+  if (hadPapi && !s.settings.payers.some((p) => p.id === 'papi')) {
+    s.settings.payers = [...s.settings.payers, { id: 'papi', name: 'Papi' }];
+  }
+  const fromPapi = ({ papi, ...x }) => (papi ? { ...x, paidBy: 'papi' } : x);
+  s.transactions = s.transactions.map(fromPapi);
+  s.recurring = s.recurring.map(fromPapi);
   s.version = def.version;
   return s;
 }
 
-function persist() {
+export function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   listeners.forEach((fn) => fn(state));
 }
@@ -125,8 +138,8 @@ export function addTransaction(tx, { silent = false } = {}) {
     Object.assign(record, { currency: tx.currency, originalAmount: round2(tx.originalAmount), fxRate: tx.fxRate });
   }
   if (tx.recurringId) record.recurringId = tx.recurringId;
-  // Pagado por papi: cuenta como gasto, pero no sale de ninguna cuenta.
-  if (tx.papi && record.type === 'expense') { record.papi = true; record.account = ''; }
+  // Pagado por otra persona: cuenta como gasto, pero no sale de ninguna cuenta.
+  if (tx.paidBy && record.type === 'expense') { record.paidBy = tx.paidBy; record.account = ''; }
 
   state.transactions.push(record);
   if (!silent) persist();
@@ -177,14 +190,48 @@ export function allTags() {
 
 export const categoriesOf = (kind) => state.categories.filter((c) => c.kind === kind);
 export const categoryById = (id) =>
-  id === PAPI.id ? PAPI : state.categories.find((c) => c.id === id) ?? { id, name: 'Sin categoría', icon: 'box' };
+  payerBucket(id) ?? state.categories.find((c) => c.id === id) ?? { id, name: 'Sin categoría', icon: 'box' };
 
-/**
- * "Pagado por papi" funciona como una categoría propia en gráficas y listas.
- * El gasto conserva su categoría real (supermercado, salud…) para ver qué paga.
- */
-export const PAPI = { id: '__papi', kind: 'expense', name: 'Pagado por papi', icon: 'user', budget: 0 };
-export const bucketOf = (t) => (t.papi ? PAPI.id : t.category);
+/* ---------- Pagado por otras personas (opcional) ------------------- */
+// Cada pagador funciona como una categoría propia en gráficas y listas ("Pagado por Papi").
+// El gasto conserva su categoría real (supermercado, salud…) para ver qué te paga.
+
+const PAYER_PREFIX = '__payer:';
+export const payers = ({ includeArchived = false } = {}) =>
+  (state.settings.payers || []).filter((p) => includeArchived || !p.archived);
+export const payerById = (id) =>
+  (state.settings.payers || []).find((p) => p.id === id) ?? (id ? { id, name: 'Otra persona' } : null);
+export const payerBucketId = (payerId) => PAYER_PREFIX + payerId;
+export const bucketOf = (t) => (t.paidBy ? payerBucketId(t.paidBy) : t.category);
+
+function payerBucket(id) {
+  if (!String(id).startsWith(PAYER_PREFIX)) return null;
+  const p = payerById(id.slice(PAYER_PREFIX.length));
+  return { id, kind: 'expense', name: `Pagado por ${p.name}`, icon: 'user', budget: 0, payerId: p.id };
+}
+
+export function addPayer(name) {
+  const p = { id: uid(), name: name.trim() };
+  state.settings.payers = [...payers({ includeArchived: true }), p];
+  persist();
+  return p;
+}
+
+export function updatePayer(id, patch) {
+  state.settings.payers = payers({ includeArchived: true }).map((p) => (p.id === id ? { ...p, ...patch } : p));
+  persist();
+}
+
+/** Quitar un pagador: si ya tiene gastos se archiva (sus gráficas siguen), si no se borra. */
+export function removePayer(id) {
+  const used = state.transactions.some((t) => t.paidBy === id);
+  state.settings.payers = used
+    ? payers({ includeArchived: true }).map((p) => (p.id === id ? { ...p, archived: true } : p))
+    : payers({ includeArchived: true }).filter((p) => p.id !== id);
+  // Los recurrentes que pagaba esa persona pasan a pagarlos tú.
+  state.recurring = state.recurring.map(({ paidBy, ...r }) => (paidBy && paidBy !== id ? { ...r, paidBy } : r));
+  persist();
+}
 
 /* ---------- Cuentas / patrimonio ------------------------------------- */
 
@@ -218,7 +265,12 @@ export function accountBreakdown(a, today = todayISO()) {
     }
     const since = a.syncedAt || a.updatedAt;
     for (const t of state.transactions) {
-      if (t.account === a.id && !t.papi && t.createdAt > since) flows += t.type === 'income' ? t.amount : -t.amount;
+      if (t.account === a.id && !t.paidBy && t.createdAt > since) flows += t.type === 'income' ? t.amount : -t.amount;
+    }
+    // Dinero prestado (sale de la cuenta) y lo que te van devolviendo (entra).
+    for (const d of state.debts) {
+      if (d.account === a.id && d.createdAt > since) flows -= d.amount;
+      for (const p of d.payments) if (p.account === a.id && p.at > since) flows += p.amount;
     }
   }
   return { interest, flows, value: a.balance + interest + flows };
@@ -311,7 +363,7 @@ export function runRecurring(today = todayISO()) {
       if (key === current && day > todayDay) break;
       addTransaction({
         type: r.type, amount: r.amount, description: r.name, category: r.category,
-        account: r.account, tags: r.tags, papi: r.papi, date: `${key}-${String(day).padStart(2, '0')}`, recurringId: r.id,
+        account: r.account, tags: r.tags, paidBy: r.paidBy, date: `${key}-${String(day).padStart(2, '0')}`, recurringId: r.id,
       }, { silent: true });
       r.lastMonth = key;
       added++;
@@ -350,6 +402,55 @@ export function addPending({ name, amount, expectedDate }) {
 
 export function deletePending(id) {
   state.pending = state.pending.filter((p) => p.id !== id);
+  persist();
+}
+
+/* ---------- Me deben -------------------------------------------------- */
+
+export const debtPaid = (d) => round2(d.payments.reduce((s, p) => s + p.amount, 0));
+export const debtRemaining = (d) => round2(Math.max(0, d.amount - debtPaid(d)));
+export const openDebts = () => state.debts.filter((d) => debtRemaining(d) > 0);
+
+/** account: cuenta de la que salió el dinero ('' si no quieres que afecte a ninguna). */
+export function addDebt({ person, concept = '', amount, account = '', txId = '' }, { silent = false } = {}) {
+  const d = { id: uid(), person: person.trim(), concept: concept.trim(), amount: round2(amount), account, txId,
+    createdAt: new Date().toISOString(), payments: [] };
+  state.debts.push(d);
+  if (!silent) persist();
+  return d;
+}
+
+/** Registra un pago (parcial o total). Nunca cobra más de lo que queda. */
+export function addDebtPayment(debtId, amount, account = '') {
+  const d = state.debts.find((x) => x.id === debtId);
+  if (!d) return 0;
+  const value = round2(Math.min(amount, debtRemaining(d)));
+  if (value <= 0) return 0;
+  d.payments.push({ id: uid(), amount: value, account, at: new Date().toISOString() });
+  persist();
+  return value;
+}
+
+export function deleteDebt(id) {
+  state.debts = state.debts.filter((d) => d.id !== id);
+  persist();
+}
+
+/** Personas a las que ya has prestado (para sugerir nombres). */
+export const knownDebtors = () => [...new Set(state.debts.map((d) => d.person))].sort((a, b) => a.localeCompare(b, 'es'));
+
+/* ---------- Notas ------------------------------------------------------ */
+
+export function saveNote(id, text) {
+  const now = new Date().toISOString();
+  const n = id && state.notes.find((x) => x.id === id);
+  if (n) Object.assign(n, { text, updatedAt: now });
+  else state.notes.push({ id: uid(), text, createdAt: now, updatedAt: now });
+  persist();
+}
+
+export function deleteNote(id) {
+  state.notes = state.notes.filter((n) => n.id !== id);
   persist();
 }
 

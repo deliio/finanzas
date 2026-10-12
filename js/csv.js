@@ -2,13 +2,13 @@
 //
 // 1) Copia de seguridad — un único CSV:
 //    Columnas: registro,id,fecha,tipo,importe,descripcion,categoria,datos
-//    registro = transaccion | categoria | cuenta | posicion | recurrente | hucha | pendiente | historico | ajustes
+//    registro = transaccion | categoria | cuenta | posicion | recurrente | hucha | pendiente | historico | deuda | nota | ajustes
 //    Las transacciones usan las columnas directamente (legibles en Excel/Numbers) y guardan
 //    el resto de campos en "datos" (JSON). El resto de entidades guardan el objeto completo en "datos".
 //
 // 2) Power BI — varios CSV "tidy" (modelo en estrella): hechos de transacciones + dimensiones.
 
-import { accountValue, categoryById } from './store.js';
+import { accountValue, categoryById, payerById, debtPaid, debtRemaining } from './store.js';
 
 const BOM = '﻿'; // para que Excel/Power BI detecten UTF-8 (acentos, €)
 const COLUMNS = ['registro', 'id', 'fecha', 'tipo', 'importe', 'descripcion', 'categoria', 'datos'];
@@ -31,6 +31,8 @@ export function stateToCSV(state) {
   push('hucha',      state.goals,      (g) => [g.createdAt ?? '', '', g.saved, g.name, '']);
   push('pendiente',  state.pending,    (p) => [p.expectedDate ?? '', 'income', p.amount, p.name, '']);
   push('historico',  state.history,    (h) => [h.date, '', h.net, '', '']);
+  push('deuda',      state.debts,      (d) => [d.createdAt.slice(0, 10), '', d.amount, d.person, '']);
+  push('nota',       state.notes,      (n) => [n.updatedAt.slice(0, 10), '', '', n.text.split('\n')[0].slice(0, 60), '']);
 
   // La clave API no se exporta: el CSV puede acabar en iCloud, correo…
   const { finnhubKey, ...settings } = state.settings;
@@ -46,8 +48,9 @@ export function csvToState(text) {
   const get = (r, col) => r[idx[col]] ?? '';
   const json = (r) => { try { return JSON.parse(get(r, 'datos') || '{}'); } catch { return {}; } };
 
-  const next = { transactions: [], categories: [], accounts: [], holdings: [], recurring: [], goals: [], pending: [], history: [], settings: {} };
-  const target = { categoria: 'categories', cuenta: 'accounts', posicion: 'holdings', recurrente: 'recurring', hucha: 'goals', pendiente: 'pending', historico: 'history' };
+  const next = { transactions: [], categories: [], accounts: [], holdings: [], recurring: [], goals: [], pending: [], history: [], debts: [], notes: [], settings: {} };
+  const target = { categoria: 'categories', cuenta: 'accounts', posicion: 'holdings', recurrente: 'recurring', hucha: 'goals',
+    pendiente: 'pending', historico: 'history', deuda: 'debts', nota: 'notes' };
 
   for (const r of rows) {
     if (r.length < 2) continue;
@@ -94,7 +97,7 @@ export function powerBIFiles(state, { estimateHolding } = {}) {
   const tx = [[
     'transaccion_id', 'fecha', 'anio', 'mes', 'anio_mes', 'trimestre', 'dia_semana',
     'tipo', 'importe_eur', 'importe_con_signo', 'categoria_id', 'categoria', 'concepto',
-    'cuenta_id', 'cuenta', 'etiquetas', 'num_etiquetas', 'dividido_entre', 'pagado_por_papi', 'divisa_original',
+    'cuenta_id', 'cuenta', 'etiquetas', 'num_etiquetas', 'dividido_entre', 'pagado_por', 'divisa_original',
     'importe_original', 'tipo_cambio', 'recurrente', 'creado_en',
   ]];
   for (const t of [...state.transactions].sort((a, b) => a.date.localeCompare(b.date))) {
@@ -104,7 +107,7 @@ export function powerBIFiles(state, { estimateHolding } = {}) {
       t.type === 'income' ? 'ingreso' : 'gasto', num(t.amount), num(t.type === 'income' ? t.amount : -t.amount),
       t.category, categoryById(t.category).name, t.description,
       t.account || '', accountName[t.account] ?? '', (t.tags || []).join('|'), (t.tags || []).length,
-      t.split === true ? 2 : (t.split || 1), t.papi ? 1 : 0, t.currency || 'EUR', num(t.originalAmount ?? t.amount), t.fxRate ?? 1,
+      t.split === true ? 2 : (t.split || 1), t.paidBy ? payerById(t.paidBy).name : '', t.currency || 'EUR', num(t.originalAmount ?? t.amount), t.fxRate ?? 1,
       t.recurringId ? 1 : 0, t.createdAt,
     ]);
   }
@@ -131,6 +134,9 @@ export function powerBIFiles(state, { estimateHolding } = {}) {
   const goals = [['hucha_id', 'nombre', 'objetivo', 'ahorrado', 'progreso_pct']];
   state.goals.forEach((g) => goals.push([g.id, g.name, num(g.target), num(g.saved), g.target ? ((g.saved / g.target) * 100).toFixed(1) : 0]));
 
+  const debts = [['deuda_id', 'persona', 'concepto', 'importe', 'pagado', 'pendiente', 'fecha', 'transaccion_id']];
+  state.debts.forEach((d) => debts.push([d.id, d.person, d.concept, num(d.amount), num(debtPaid(d)), num(debtRemaining(d)), d.createdAt.slice(0, 10), d.txId || '']));
+
   const files = [
     ['transacciones.csv', tx],
     ['etiquetas_transacciones.csv', tags],
@@ -139,6 +145,7 @@ export function powerBIFiles(state, { estimateHolding } = {}) {
     ['patrimonio_historico.csv', hist],
     ['inversiones.csv', inv],
     ['huchas.csv', goals],
+    ['me_deben.csv', debts],
   ];
   return files.map(([name, rows]) => ({ name, content: BOM + toCSV(rows) }));
 }
