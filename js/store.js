@@ -139,10 +139,11 @@ export function addTransaction(tx, { silent = false } = {}) {
     tags: normalizeTags(tx.tags),
     // Bypass: con la revisión desactivada todo entra revisado. Con ella activada,
     // lo que llega solo (Atajos, URL, recurrentes) entra pendiente de revisar.
-    revisado: !(state.settings.reviewEnabled && tx.needsReview),
+    // forceReview: lo que llega del buzón siempre entra pendiente (no lo has visto aún).
+    revisado: !((state.settings.reviewEnabled && tx.needsReview) || tx.forceReview),
     createdAt: new Date().toISOString(),
   };
-  if (tx.source) record.source = tx.source; // 'atajo' | 'url' | 'recurrente'
+  if (tx.source) record.source = tx.source; // 'atajo' | 'url' | 'recurrente' | 'buzon'
   // Campos opcionales: solo se guardan si aplican.
   if (tx.split > 1) record.split = Math.round(tx.split); // nº de personas
   if (tx.currency && tx.currency !== 'EUR') {

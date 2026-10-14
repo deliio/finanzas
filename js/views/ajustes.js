@@ -4,6 +4,7 @@
 import { getState, replaceState, resetState, todayISO, setSetting, addRecurring, updateRecurring, deleteRecurring,
   runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget, payers, payerById, addPayer, updatePayer, removePayer, setCategoryColor, pendingReview, markAllReviewed } from '../store.js';
 import { fetchQuote, estimateHolding } from '../market.js';
+import { mailboxConfig, mailboxReady, newToken, testMailbox, pullMailbox, mailboxScript } from '../mailbox.js';
 import { stateToCSV, csvToState, powerBIFiles } from '../csv.js';
 import { toast, esc, usd, money, icon, openSheet, parseAmount, amountToInput } from '../ui.js';
 
@@ -22,6 +23,21 @@ export function render(root) {
     </div>
     <p class="hint" style="margin:8px 4px 0">Activada: los pagos que llegan por Atajos y los recurrentes se guardan al momento
       como <b>pendientes</b> y los confirmas después desde Inicio. Desactivada: todo entra ya revisado.</p>
+
+    <div class="section-title">Buzón automático</div>
+    ${mailboxReady() ? `<div class="list">
+      <button class="row" data-action="mailbox">
+        <span class="icon">${icon('inbox')}</span>
+        <span class="main"><div class="title">Conectado${mailboxConfig().user ? ` · ${esc(mailboxConfig().user)}` : ''}</div>
+          <div class="subtitle">Los pagos del Atajo llegan solos a pendientes</div></span>
+        <span class="trail muted">${icon('chevron')}</span>
+      </button></div>
+      <button class="btn" type="button" data-action="mailbox-pull" style="margin-top:10px">Recoger pagos ahora</button>`
+    : `<div class="card">
+        <p class="muted" style="margin:0 0 14px;font-size:15px">Con un buzón en tu cuenta de Google, el Atajo envía cada pago
+          <b style="color:var(--text)">sin abrir la app</b> y al entrar ya los tienes en pendientes. Gratis; sirve para toda la familia.</p>
+        <button class="btn btn-primary" type="button" data-action="mailbox">Configurar buzón</button>
+      </div>`}
 
     <div class="section-title">Pagos recurrentes <button class="link-btn" data-action="add-rec">+ Añadir</button></div>
     ${recurring.length ? `<div class="list">${recurring.map((r) => {
@@ -112,6 +128,12 @@ export function render(root) {
     if (rec) return openRecurringForm(rec.dataset.rec, () => render(root));
     const b = e.target.closest('[data-budget]');
     if (b) return openBudgetSheet(b.dataset.budget, () => render(root));
+    if (e.target.closest('[data-action="mailbox"]')) return openMailboxSheet(() => render(root));
+    if (e.target.closest('[data-action="mailbox-pull"]')) {
+      return pullMailbox()
+        .then((n) => { toast(n ? `${n} pago${n === 1 ? '' : 's'} recibido${n === 1 ? '' : 's'}` : 'No hay pagos nuevos'); render(root); })
+        .catch((err) => alert(err.message));
+    }
     const col = e.target.closest('[data-color]');
     if (col) return openColorSheet(col.dataset.color, () => render(root));
     if (e.target.closest('[data-action="add-payer"]')) return openPayerSheet(null, () => render(root));
@@ -209,6 +231,61 @@ export function openBudgetSheet(categoryId, onDone) {
     save(amount);
   });
   el.querySelector('#b-clear')?.addEventListener('click', () => save(0));
+}
+
+/* ---------- Buzón automático ------------------------------------------- */
+
+function openMailboxSheet(onDone) {
+  const current = mailboxConfig();
+  const token = current.token || getState().settings.mailboxDraftToken || newToken();
+  if (!current.token) setSetting('mailboxDraftToken', token); // mismo código aunque cierres y vuelvas
+  const { el, close } = openSheet(`
+    <h3 class="sheet-title">Buzón automático</h3>
+    <ol class="steps">
+      <li>Pulsa <b>Copiar script</b>.</li>
+      <li>En el ordenador, crea una hoja en <b>sheets.new</b> → <b>Extensiones → Apps Script</b>, borra lo que haya y pega.</li>
+      <li><b>Implementar → Nueva implementación → Aplicación web</b>: ejecutar como <b>Yo</b>, acceso <b>Cualquier usuario</b>. Autoriza y copia la URL.</li>
+      <li>Pega aquí la URL y pulsa <b>Guardar y probar</b>.</li>
+    </ol>
+    <div class="field-group">
+      <div class="field"><label>Código</label><span class="field-note mono" id="mb-token">${esc(token)}</span></div>
+      <div class="field"><label for="mb-user">Tu nombre</label>
+        <input id="mb-user" maxlength="20" placeholder="Para compartir el buzón" autocomplete="off" value="${esc(current.user || '')}"></div>
+      <div class="field"><label for="mb-url">URL</label>
+        <input id="mb-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" value="${esc(current.url || '')}"></div>
+    </div>
+    <button class="btn" type="button" id="mb-copy">${icon('download')} Copiar script</button>
+    <button class="btn btn-primary" type="button" id="mb-save">Guardar y probar</button>
+    ${current.url ? '<button class="btn btn-danger" type="button" id="mb-del">Quitar buzón</button>' : ''}
+    <button class="btn" type="button" data-close>Cerrar</button>
+  `);
+  const $ = (s) => el.querySelector(s);
+  $('#mb-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(mailboxScript(token)); toast('Script copiado'); }
+    catch { alert('No se pudo copiar. Inténtalo de nuevo.'); }
+  });
+  $('#mb-save').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const config = { url: $('#mb-url').value.trim(), token, user: $('#mb-user').value.trim() };
+    if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(config.url)) return toast('Pega la URL de la aplicación web de Apps Script');
+    btn.disabled = true; btn.textContent = 'Probando…';
+    try {
+      const waiting = await testMailbox(config);
+      setSetting('mailbox', config);
+      setSetting('reviewEnabled', true); // lo que llega del buzón se revisa en la bandeja
+      close();
+      toast(waiting ? `Conectado · ${waiting} pago${waiting === 1 ? '' : 's'} esperando` : 'Buzón conectado');
+      await pullMailbox().catch(() => {});
+      onDone();
+    } catch (err) {
+      alert(err.message);
+      btn.disabled = false; btn.textContent = 'Guardar y probar';
+    }
+  });
+  $('#mb-del')?.addEventListener('click', () => {
+    if (!confirm('¿Quitar el buzón? Los pagos que ya recibiste se quedan.')) return;
+    setSetting('mailbox', null); close(); onDone();
+  });
 }
 
 /* ---------- Colores de categoría --------------------------------------- */

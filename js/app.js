@@ -10,6 +10,7 @@ import * as mapa from './views/mapa.js';
 import * as informes from './views/informes.js';
 import { readPrefillFromURL, quickSavePending } from './views/nuevo-gasto.js';
 import * as revisar from './views/revisar.js';
+import { pullMailbox } from './mailbox.js';
 import { getState, setSetting, runRecurring } from './store.js';
 import { snapshotNetWorth } from './networth.js';
 import { toast, icon } from './ui.js';
@@ -84,16 +85,28 @@ function render() {
     a.classList.toggle('active', a.dataset.route === tab));
 }
 
+// --- Buzón automático (Google) -----------------------------------------
+// Recoge los pagos que el Atajo envió mientras la app estaba cerrada.
+function checkMailbox() {
+  pullMailbox().then((n) => {
+    if (!n) return;
+    toast(n === 1 ? '1 pago recibido · pendiente de revisar' : `${n} pagos recibidos · pendientes de revisar`);
+    if (['inicio', 'movimientos'].includes(currentRoute())) render();
+  }).catch(() => { /* sin conexión o buzón mal configurado: se reintenta al volver */ });
+}
+
 applyRecurring();
 snapshotNetWorth();
 window.addEventListener('hashchange', render);
 render();
+checkMailbox();
 
 // Al volver a la app (iOS la mantiene en memoria), generamos lo que toque y refrescamos.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   snapshotNetWorth();
   if (applyRecurring() && currentRoute() !== 'nuevo') render();
+  checkMailbox();
 });
 
 // --- PWA ---------------------------------------------------------------

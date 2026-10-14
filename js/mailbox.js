@@ -1,0 +1,152 @@
+// Buzón automático en Google (opcional): el Atajo de iOS envía cada pago a una hoja de
+// Google (Apps Script) sin abrir la app, y la app los recoge al abrirse y los deja
+// pendientes de revisar. Un mismo buzón sirve para varias personas (campo "usuario").
+//
+// API del buzón (Apps Script desplegado como aplicación web):
+//   GET ?action=pull&token=…&user=…      → { ok, items: [{ id, at, user, type, amount, merchant, lat, lon }] }
+//   GET ?action=ack&token=…&ids=a,b,c    → borra esos pagos del buzón
+//   POST { token, user, type, amount, merchant, lat, lon }  (lo usa el Atajo)
+
+import { getState, setSetting, addTransaction, suggestCategory, validLocation, round2, todayISO } from './store.js';
+import { parseAmount } from './ui.js';
+import { fetchRateToEur } from './market.js';
+
+export const mailboxConfig = () => getState().settings.mailbox || {};
+export const mailboxReady = () => Boolean(mailboxConfig().url && mailboxConfig().token);
+
+/** Código secreto aleatorio para un buzón nuevo. */
+export const newToken = () =>
+  Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 20);
+
+async function call(params, config = mailboxConfig()) {
+  const url = new URL(config.url);
+  Object.entries({ token: config.token, ...params }).forEach(([k, v]) => url.searchParams.set(k, v));
+  let res;
+  try {
+    res = await fetch(url, { redirect: 'follow' });
+  } catch {
+    throw new Error('No se pudo conectar con el buzón.');
+  }
+  if (!res.ok) throw new Error(`El buzón respondió ${res.status}.`);
+  let data;
+  try { data = await res.json(); } catch { throw new Error('La dirección no parece un buzón (¿URL correcta y desplegada como "Cualquier usuario"?).'); }
+  if (!data.ok) throw new Error(data.error === 'token' ? 'El código secreto no coincide con el del script.' : 'Error en el buzón.');
+  return data;
+}
+
+/** Comprueba la conexión sin importar nada. Devuelve cuántos pagos esperan. */
+export async function testMailbox(config) {
+  const data = await call({ action: 'pull', user: config.user || '' }, config);
+  return (data.items || []).length;
+}
+
+const coord = (s) => Number(String(s ?? '').trim().replace(',', '.').replace(/[^\d.-]/g, ''));
+const currencyOf = (raw = '') => (/£|GBP/i.test(raw) ? 'GBP' : /\$|USD/i.test(raw) ? 'USD' : 'EUR');
+
+let busy = false;
+
+/**
+ * Recoge los pagos del buzón, los guarda como pendientes de revisar y los borra del buzón.
+ * Nunca duplica: recuerda los últimos ids importados por si el borrado falla.
+ * Devuelve cuántos movimientos ha añadido.
+ */
+export async function pullMailbox() {
+  if (!mailboxReady() || busy || navigator.onLine === false) return 0;
+  busy = true;
+  try {
+    const { user = '' } = mailboxConfig();
+    const { items = [] } = await call({ action: 'pull', user });
+    if (!items.length) return 0;
+
+    const seen = new Set(getState().settings.mailboxSeen || []);
+    const liquid = getState().accounts.filter((a) => a.kind === 'liquidez').map((a) => a.id);
+    const last = getState().settings.lastAccount;
+    let added = 0;
+
+    for (const it of items) {
+      if (seen.has(it.id)) continue;
+      seen.add(it.id);
+      const original = parseAmount(it.amount);
+      if (!(original > 0)) continue;
+      const type = /^(income|ingreso)$/i.test(String(it.type || '').trim()) ? 'income' : 'expense';
+      const currency = currencyOf(String(it.amount));
+      const date = it.at ? todayISO(new Date(it.at)) : todayISO();
+      let rate = 1;
+      if (currency !== 'EUR') {
+        try { ({ rate } = await fetchRateToEur(currency, date)); } catch { /* sin cambio: se revisará el importe */ }
+      }
+      const merchant = String(it.merchant || '').trim();
+      addTransaction({
+        type, amount: round2(Math.abs(original) * rate), description: merchant,
+        category: suggestCategory(merchant, type), date,
+        account: liquid.includes(last) ? last : '',
+        currency, originalAmount: Math.abs(original), fxRate: rate,
+        location: validLocation({ lat: coord(it.lat), lon: coord(it.lon) }),
+        needsReview: true, forceReview: true, source: 'buzon',
+      }, { silent: true });
+      added++;
+    }
+    // Guarda todo de una vez y recuerda los ids (los 300 últimos bastan).
+    setSetting('mailboxSeen', [...seen].slice(-300));
+    await call({ action: 'ack', ids: items.map((i) => i.id).join(',') }).catch(() => {});
+    return added;
+  } finally {
+    busy = false;
+  }
+}
+
+/** Script para pegar en Google Apps Script (con el código secreto ya puesto). */
+export function mailboxScript(token) {
+  return `// Buzón de Finanzas · pega esto en Extensiones → Apps Script de una hoja de Google
+const TOKEN = '${token}';
+const HOJA = 'Buzon';
+
+function hoja_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(HOJA);
+  if (!sh) {
+    sh = ss.insertSheet(HOJA);
+    sh.getRange('A:H').setNumberFormat('@'); // todo como texto (importes "23,40 €" tal cual)
+    sh.appendRow(['id', 'fecha', 'usuario', 'tipo', 'importe', 'comercio', 'lat', 'lon']);
+  }
+  return sh;
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function guardar_(d) {
+  if (String(d.token) !== TOKEN) return json_({ ok: false, error: 'token' });
+  const id = Utilities.getUuid();
+  hoja_().appendRow([id, new Date().toISOString(), String(d.user || ''), String(d.type || 'expense'),
+    String(d.amount || ''), String(d.merchant || ''), String(d.lat || ''), String(d.lon || '')]);
+  return json_({ ok: true, id: id });
+}
+
+// El Atajo envía los pagos aquí (POST con cuerpo JSON).
+function doPost(e) {
+  let d = {};
+  try { d = JSON.parse(e.postData.contents); } catch (err) { d = e.parameter || {}; }
+  return guardar_(d);
+}
+
+// La app recoge (pull) y borra (ack) los pagos.
+function doGet(e) {
+  const p = e.parameter || {};
+  if (p.action === 'add') return guardar_(p);
+  if (String(p.token) !== TOKEN) return json_({ ok: false, error: 'token' });
+  const sh = hoja_();
+  const filas = sh.getDataRange().getValues();
+  if (p.action === 'ack') {
+    const ids = String(p.ids || '').split(',');
+    for (let i = filas.length; i >= 2; i--) if (ids.indexOf(String(filas[i - 1][0])) >= 0) sh.deleteRow(i);
+    return json_({ ok: true });
+  }
+  const items = filas.slice(1)
+    .filter(function (r) { return r[0] && (!p.user || String(r[2]) === String(p.user)); })
+    .map(function (r) { return { id: r[0], at: r[1], user: r[2], type: r[3], amount: r[4], merchant: r[5], lat: r[6], lon: r[7] }; });
+  return json_({ ok: true, items: items });
+}
+`;
+}

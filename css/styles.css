@@ -643,3 +643,9 @@ body.privacy .map-box { filter: blur(10px); }
 }
 .review-done-icon .ico { width: 42px; height: 42px; stroke-width: 2.4; }
 @keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ---------- v17: buzón automático --------------------------------------- */
+.steps { margin: -4px 0 16px; padding-left: 20px; color: var(--text-2); font-size: 14px; line-height: 1.45; }
+.steps li + li { margin-top: 6px; }
+.steps b { color: var(--text); font-weight: 600; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: var(--text); user-select: all; }

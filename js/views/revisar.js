@@ -5,7 +5,7 @@
 import { getState, pendingReview, updateTransaction, deleteTransaction, categoriesOf, payerById, todayISO, round2 } from '../store.js';
 import { esc, icon, money, parseAmount, amountToInput, toast, currencySymbol } from '../ui.js';
 
-const SOURCE = { atajo: 'Apple Pay · Atajo', url: 'Atajo (enlace)', recurrente: 'Pago recurrente' };
+const SOURCE = { atajo: 'Apple Pay · Atajo', url: 'Atajo (enlace)', recurrente: 'Pago recurrente', buzon: 'Buzón automático' };
 
 export function render(root, { navigate }) {
   document.body.classList.add('is-modal');

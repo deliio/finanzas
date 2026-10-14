@@ -50,7 +50,7 @@ export function render(root, { navigate }) {
       </header>
 
       ${(() => {
-        const n = getState().settings.reviewEnabled ? pendingReview().length : 0;
+        const n = getState().settings.reviewEnabled || getState().settings.mailbox?.url ? pendingReview().length : 0;
         return n ? `<a class="review-banner" href="#/revisar">
           <span class="review-count num-plain">${n}</span>
           <span class="main">Tienes ${n} movimiento${n === 1 ? '' : 's'} pendiente${n === 1 ? '' : 's'} de revisar</span>
