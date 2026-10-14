@@ -649,3 +649,5 @@ body.privacy .map-box { filter: blur(10px); }
 .steps li + li { margin-top: 6px; }
 .steps b { color: var(--text); font-weight: 600; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: var(--text); user-select: all; }
+
+#mb-token { font-size: 14px; }

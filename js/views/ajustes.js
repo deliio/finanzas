@@ -242,13 +242,15 @@ function openMailboxSheet(onDone) {
   const { el, close } = openSheet(`
     <h3 class="sheet-title">Buzón automático</h3>
     <ol class="steps">
+      <li>¿Te unes al buzón de alguien de tu familia? Pon <b>su código y su URL</b>, tu nombre y pulsa <b>Guardar y probar</b>. Si no, sigue:</li>
       <li>Pulsa <b>Copiar script</b>.</li>
       <li>En el ordenador, crea una hoja en <b>sheets.new</b> → <b>Extensiones → Apps Script</b>, borra lo que haya y pega.</li>
       <li><b>Implementar → Nueva implementación → Aplicación web</b>: ejecutar como <b>Yo</b>, acceso <b>Cualquier usuario</b>. Autoriza y copia la URL.</li>
       <li>Pega aquí la URL y pulsa <b>Guardar y probar</b>.</li>
     </ol>
     <div class="field-group">
-      <div class="field"><label>Código</label><span class="field-note mono" id="mb-token">${esc(token)}</span></div>
+      <div class="field"><label for="mb-token">Código</label>
+        <input id="mb-token" class="mono" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(token)}"></div>
       <div class="field"><label for="mb-user">Tu nombre</label>
         <input id="mb-user" maxlength="20" placeholder="Para compartir el buzón" autocomplete="off" value="${esc(current.user || '')}"></div>
       <div class="field"><label for="mb-url">URL</label>
@@ -260,13 +262,16 @@ function openMailboxSheet(onDone) {
     <button class="btn" type="button" data-close>Cerrar</button>
   `);
   const $ = (s) => el.querySelector(s);
+  // Editable: para unirse a un buzón que ya existe (familia), se pone el mismo código.
+  const codeValue = () => $('#mb-token').value.trim();
   $('#mb-copy').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(mailboxScript(token)); toast('Script copiado'); }
+    try { await navigator.clipboard.writeText(mailboxScript(codeValue())); toast('Script copiado'); }
     catch { alert('No se pudo copiar. Inténtalo de nuevo.'); }
   });
   $('#mb-save').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
-    const config = { url: $('#mb-url').value.trim(), token, user: $('#mb-user').value.trim() };
+    const config = { url: $('#mb-url').value.trim(), token: codeValue(), user: $('#mb-user').value.trim() };
+    if (config.token.length < 8) return toast('El código debe tener al menos 8 caracteres');
     if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(config.url)) return toast('Pega la URL de la aplicación web de Apps Script');
     btn.disabled = true; btn.textContent = 'Probando…';
     try {
