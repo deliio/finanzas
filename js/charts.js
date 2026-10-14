@@ -8,11 +8,9 @@ import { getState, categoryById, payerById } from './store.js';
 export const PALETTE = ['#ffffff', '#32d74b', '#0a84ff', '#ff9f0a', '#bf5af2', '#ff375f', '#64d2ff', '#ffd60a', '#8e8e93', '#5e5ce6'];
 const OTHERS_COLOR = '#636366';
 
-/** Color fijo por categoría: la misma categoría tiene el mismo color en todas las gráficas. */
+/** Color de la categoría (el que elijas en Ajustes → Categorías y colores). */
 export function categoryColor(id) {
-  const ids = getState().categories.filter((c) => c.kind === 'expense').map((c) => c.id);
-  const i = ids.indexOf(id);
-  return PALETTE[(i < 0 ? ids.length : i) % PALETTE.length];
+  return getState().categories.find((c) => c.id === id)?.color ?? OTHERS_COLOR;
 }
 
 /** Agrupa gastos por categoría real → segmentos ordenados (top n + "Otras"). */

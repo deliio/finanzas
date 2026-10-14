@@ -39,7 +39,7 @@ export function render(root) {
 
     root.innerHTML = `
       <div class="topbar">
-        <a class="left" href="#/inicio">‹ Resumen</a>
+        <a class="left" href="#/informes">‹ Informes</a>
         <h2>Análisis</h2>
         <span style="justify-self:end">${privacyButton()}</span>
       </div>
@@ -68,7 +68,7 @@ export function render(root) {
             <span class="main">
               <div class="title">${esc(r.c.name)}</div>
               <div class="subtitle">${r.count} movimiento${r.count === 1 ? '' : 's'} · ${pct(r.sum, total)}</div>
-              <div class="mini-bar"><span style="width:${total ? (r.sum / total) * 100 : 0}%"></span></div>
+              <div class="mini-bar"><span style="width:${total ? (r.sum / total) * 100 : 0}%;background:${r.c.color || 'var(--text-2)'}"></span></div>
             </span>
             <span class="trail num">${money(r.sum)}</span>
           </button>`).join('')}

@@ -27,12 +27,19 @@ export const DEFAULT_LIFESTYLE = {
   ocio: 'ocio, restaurantes, compras, #viajes',
 };
 
-// Migra categorías guardadas con emojis (v0.1) a las claves de iconos SVG.
+// Colores por defecto de las categorías de gasto (en orden). El usuario puede cambiarlos en Ajustes.
+export const CATEGORY_PALETTE = ['#ffffff', '#32d74b', '#0a84ff', '#ff9f0a', '#bf5af2', '#ff375f', '#64d2ff', '#ffd60a', '#8e8e93', '#5e5ce6'];
+const isHex = (c) => /^#[0-9a-f]{6}$/i.test(c || '');
+
+// Migra emojis (v0.1) a iconos SVG y asigna un color a las categorías que no lo tengan
+// (mismo color que ya veías en las gráficas, para no cambiar nada al actualizar).
 function normalizeCategories(categories) {
-  return categories.map(({ color, ...c }) => {
-    if (ICONS[c.icon]) return c;
+  let i = 0;
+  return categories.map((c) => {
     const def = DEFAULT_CATEGORIES.find((d) => d.id === c.id);
-    return { ...c, icon: def?.icon ?? 'box' };
+    const icon = ICONS[c.icon] ? c.icon : (def?.icon ?? 'box');
+    const fallback = CATEGORY_PALETTE[(c.kind === 'expense' ? i++ : 0) % CATEGORY_PALETTE.length];
+    return { ...c, icon, color: isHex(c.color) ? c.color.toLowerCase() : fallback };
   });
 }
 
@@ -42,7 +49,7 @@ function defaultState() {
     // { id, type: 'expense'|'income', amount (€), description, category, date: 'YYYY-MM-DD',
     //   note, account, tags: [], split (nº personas), paidBy (id de quien lo paga), currency, originalAmount, fxRate, recurringId, createdAt }
     transactions: [],
-    categories: structuredClone(DEFAULT_CATEGORIES),
+    categories: normalizeCategories(structuredClone(DEFAULT_CATEGORIES)),
     accounts: [],     // { id, kind: 'liquidez'|'activo'|'deuda', name, balance, interestRate, updatedAt, syncedAt }
     holdings: [],     // ETF espejo: { id, name, isin, ticker, invested, refValue, refPrice, refFx, refDate }
     recurring: [],    // { id, name, type, amount, category, account, tags, day, active, lastMonth: 'YYYY-MM' }
@@ -292,6 +299,14 @@ export function accountBreakdown(a, today = todayISO()) {
 export const accountValue = (a) => accountBreakdown(a).value;
 
 /** Presupuesto mensual de una categoría (0 = sin límite). */
+/** Cambia el color (#rrggbb) de una categoría. */
+export function setCategoryColor(categoryId, color) {
+  const c = state.categories.find((x) => x.id === categoryId);
+  if (!c || !isHex(color)) return;
+  c.color = color.toLowerCase();
+  persist();
+}
+
 export function setBudget(categoryId, amount) {
   const c = state.categories.find((x) => x.id === categoryId);
   if (!c) return;

@@ -568,3 +568,45 @@ body.privacy .map-box { filter: blur(10px); }
 
 /* Mapa base de OpenStreetMap en modo oscuro (el calor y los puntos no se ven afectados) */
 .map-box .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.35); }
+
+/* ---------- v15: calendario de gasto (Informes) ------------------------ */
+.cal-card { padding: 14px 12px 12px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.cal-head { margin-bottom: 6px; }
+.cal-head div { text-align: center; font-size: 11px; font-weight: 600; color: var(--text-3); }
+.cal-cell {
+  aspect-ratio: 1 / 1.08; border-radius: 10px; background: transparent;
+  display: flex; flex-direction: column; justify-content: space-between; align-items: stretch;
+  padding: 5px 4px 4px; color: var(--text); text-align: left; min-width: 0;
+  border: 1px solid var(--card-2); transition: transform .1s;
+}
+.cal-cell.blank { border: 0; }
+.cal-cell:active:not(.blank) { transform: scale(0.94); }
+.cal-num { font-size: 11px; font-weight: 600; color: var(--text-2); line-height: 1; }
+.cal-amt { font-size: 11px; font-weight: 700; text-align: right; line-height: 1; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; }
+.cal-cell.dark-text { color: #000; border-color: transparent; }
+.cal-cell.dark-text .cal-num { color: rgba(0, 0, 0, .6); }
+.cal-cell.today { outline: 2px solid var(--text); outline-offset: 1px; }
+.cal-cell.future { opacity: .35; }
+.cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 12px; font-size: 11px; color: var(--text-2); }
+.cal-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.cal-legend span:first-child { margin-right: 2px; }
+.cal-legend span:last-child { margin-left: 2px; }
+.stat-grid .pill-stat .value .muted { font-weight: 500; }
+
+/* ---------- v15: colores de categoría ----------------------------------- */
+.color-trail { display: inline-flex; align-items: center; gap: 10px; }
+.color-trail .hex { font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.swatch { width: 22px; height: 22px; border-radius: 50%; display: inline-block; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+.color-preview { display: flex; align-items: center; justify-content: center; gap: 14px; margin: -4px 0 18px; }
+.color-preview .icon { width: 52px; height: 52px; border-radius: 50%; background: var(--card-2); display: grid; place-items: center; }
+.color-preview .icon .ico { width: 24px; height: 24px; }
+.dot-lg { width: 52px; height: 52px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+.swatch-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; }
+.swatch-btn { aspect-ratio: 1; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); transition: transform .1s; }
+.swatch-btn.selected { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); transform: scale(0.92); }
+.color-input { -webkit-appearance: none; appearance: none; width: 44px !important; height: 30px; flex: none !important; padding: 0 !important; border: 0; background: none; border-radius: 8px; }
+.color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.color-input::-webkit-color-swatch { border: 0; border-radius: 8px; }
+
+.pill-btn { white-space: nowrap; }

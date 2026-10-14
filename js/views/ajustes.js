@@ -2,7 +2,7 @@
 // clave de Finnhub y borrado de datos.
 
 import { getState, replaceState, resetState, todayISO, setSetting, addRecurring, updateRecurring, deleteRecurring,
-  runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget, payers, payerById, addPayer, updatePayer, removePayer } from '../store.js';
+  runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget, payers, payerById, addPayer, updatePayer, removePayer, setCategoryColor } from '../store.js';
 import { fetchQuote, estimateHolding } from '../market.js';
 import { stateToCSV, csvToState, powerBIFiles } from '../csv.js';
 import { toast, esc, usd, money, icon, openSheet, parseAmount, amountToInput } from '../ui.js';
@@ -11,7 +11,8 @@ export function render(root) {
   const { transactions, accounts, settings, recurring } = getState();
 
   root.innerHTML = `
-    <header class="page-header"><h1>Ajustes</h1></header>
+    <div class="topbar" style="margin-bottom:0"><a class="left" href="#/inicio">‹ Inicio</a><span></span><span></span></div>
+    <header class="page-header" style="margin-top:0"><h1>Ajustes</h1></header>
 
     <div class="section-title" style="margin-top:8px">Pagos recurrentes <button class="link-btn" data-action="add-rec">+ Añadir</button></div>
     ${recurring.length ? `<div class="list">${recurring.map((r) => {
@@ -34,6 +35,15 @@ export function render(root) {
         <span class="trail num ${c.budget > 0 ? '' : 'muted'}">${c.budget > 0 ? money(c.budget, { decimals: false }) : 'Sin límite'}</span>
       </button>`).join('')}</div>
     <p class="hint" style="margin:8px 4px 0">Las categorías con presupuesto aparecen como anillos en Inicio. Lo que te pagan otras personas no cuenta.</p>
+
+    <div class="section-title">Categorías y colores</div>
+    <div class="list">${categoriesOf('expense').map((c) => `
+      <button class="row" data-color="${esc(c.id)}">
+        <span class="icon" style="color:${c.color}">${icon(c.icon)}</span>
+        <span class="main"><div class="title">${esc(c.name)}</div></span>
+        <span class="trail color-trail"><span class="hex muted">${esc(c.color.toUpperCase())}</span><span class="swatch" style="background:${c.color}"></span></span>
+      </button>`).join('')}</div>
+    <p class="hint" style="margin:8px 4px 0">Cada categoría usa su color en las gráficas de Inicio y Análisis.</p>
 
     <div class="section-title">Pagado por otras personas <button class="link-btn" data-action="add-payer">+ Añadir</button></div>
     ${payers().length ? `<div class="list">${payers().map((p) => `
@@ -93,6 +103,8 @@ export function render(root) {
     if (rec) return openRecurringForm(rec.dataset.rec, () => render(root));
     const b = e.target.closest('[data-budget]');
     if (b) return openBudgetSheet(b.dataset.budget, () => render(root));
+    const col = e.target.closest('[data-color]');
+    if (col) return openColorSheet(col.dataset.color, () => render(root));
     if (e.target.closest('[data-action="add-payer"]')) return openPayerSheet(null, () => render(root));
     const p = e.target.closest('[data-payer]');
     if (p) openPayerSheet(p.dataset.payer, () => render(root));
@@ -179,6 +191,50 @@ export function openBudgetSheet(categoryId, onDone) {
     save(amount);
   });
   el.querySelector('#b-clear')?.addEventListener('click', () => save(0));
+}
+
+/* ---------- Colores de categoría --------------------------------------- */
+
+// Sugerencias que quedan bien sobre negro (incluye verde neón).
+const SWATCHES = ['#ffffff', '#8e8e93', '#39ff14', '#32d74b', '#00e5ff', '#64d2ff', '#0a84ff', '#5e5ce6',
+  '#bf5af2', '#ff2d95', '#ff375f', '#ff453a', '#ff9f0a', '#ffd60a', '#a2845e', '#30b0c7'];
+
+function openColorSheet(categoryId, onDone) {
+  const c = categoryById(categoryId);
+  let color = c.color;
+  const { el, close } = openSheet(`
+    <h3 class="sheet-title">${esc(c.name)}</h3>
+    <div class="color-preview"><span class="icon" id="cp-icon">${icon(c.icon)}</span><span class="dot-lg" id="cp-dot"></span></div>
+    <div class="swatch-grid">${SWATCHES.map((s) => `<button type="button" class="swatch-btn" data-swatch="${s}" style="background:${s}" aria-label="${s}"></button>`).join('')}</div>
+    <div class="field-group" style="margin-top:16px">
+      <div class="field"><label for="cp-hex">Código</label>
+        <input id="cp-hex" maxlength="7" autocapitalize="characters" spellcheck="false" placeholder="#39FF14"></div>
+      <div class="field"><label for="cp-picker">Otro color</label>
+        <span class="field-note">Elegir libremente</span>
+        <input id="cp-picker" type="color" class="color-input"></div>
+    </div>
+    <button class="btn btn-primary" type="button" id="cp-save">Guardar</button>
+    <button class="btn" type="button" data-close>Cancelar</button>
+  `);
+  const $ = (s) => el.querySelector(s);
+  const paint = (fromInput) => {
+    $('#cp-dot').style.background = color;
+    $('#cp-icon').style.color = color;
+    if (fromInput !== 'hex') $('#cp-hex').value = color.toUpperCase();
+    if (fromInput !== 'picker') $('#cp-picker').value = color;
+    el.querySelectorAll('[data-swatch]').forEach((b) => b.classList.toggle('selected', b.dataset.swatch === color));
+  };
+  el.querySelectorAll('[data-swatch]').forEach((b) => b.addEventListener('click', () => { color = b.dataset.swatch; paint(); }));
+  $('#cp-picker').addEventListener('input', (e) => { color = e.target.value.toLowerCase(); paint('picker'); });
+  $('#cp-hex').addEventListener('input', (e) => {
+    const v = ('#' + e.target.value.replace(/[^0-9a-f]/gi, '')).slice(0, 7).toLowerCase();
+    if (/^#[0-9a-f]{6}$/.test(v)) { color = v; paint('hex'); }
+  });
+  $('#cp-save').addEventListener('click', () => {
+    setCategoryColor(c.id, color);
+    close(); toast(`${c.name}: color guardado`); onDone();
+  });
+  paint();
 }
 
 /* ---------- Pagado por otras personas ---------------------------------- */

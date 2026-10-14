@@ -44,7 +44,8 @@ export function render(root, { navigate }) {
         </div>
         <div class="header-actions">
           ${privacyButton()}
-          <button type="button" class="pill-btn" id="paste-pay">${icon('card')} Pegar pago</button>
+          <a class="icon-btn" href="#/ajustes" aria-label="Ajustes">${icon('gear')}</a>
+          <button type="button" class="pill-btn" id="paste-pay" aria-label="Pegar pago de Apple Pay">${icon('card')} Pegar</button>
         </div>
       </header>
 
