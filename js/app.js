@@ -99,6 +99,7 @@ applyRecurring();
 snapshotNetWorth();
 window.addEventListener('hashchange', render);
 render();
+window.__appStarted?.(); // la app arrancó: nunca mostrar el aviso de reparación
 checkMailbox();
 
 // Al volver a la app (iOS la mantiene en memoria), generamos lo que toque y refrescamos.

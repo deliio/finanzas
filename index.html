@@ -16,7 +16,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="css/styles.css?v=17">
+  <link rel="stylesheet" href="css/styles.css?v=18">
   <title>Finanzas</title>
 </head>
 <body>
@@ -60,8 +60,16 @@
         shown = true;
         document.getElementById('rescue').hidden = false;
       }
-      window.addEventListener('error', function () { setTimeout(rescue, 300); }, true);
-      setTimeout(rescue, 4000);
+      // Solo los fallos de scripts pueden impedir que la app arranque; un CSS, una imagen
+      // o un trozo de mapa que no cargue no es motivo para ofrecer la reparación.
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && t !== window && t.tagName && t.tagName !== 'SCRIPT') return;
+        setTimeout(rescue, 2500);
+      }, true);
+      setTimeout(rescue, 6000);
+      // La app llama a esto cuando ha pintado la primera pantalla.
+      window.__appStarted = function () { shown = true; document.getElementById('rescue').hidden = true; };
       document.getElementById('rescue-btn').addEventListener('click', function () {
         var jobs = [];
         if ('serviceWorker' in navigator) {

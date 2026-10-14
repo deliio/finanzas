@@ -1,12 +1,12 @@
 // Service worker: red primero (siempre la última versión) con copia offline de respaldo.
 // Sube CACHE_VERSION cada vez que publiques cambios para forzar la actualización.
-const CACHE_VERSION = 'finanzas-v17';
+const CACHE_VERSION = 'finanzas-v18';
 
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './css/styles.css?v=17',
+  './css/styles.css?v=18',
   './js/app.js',
   './js/store.js',
   './js/ui.js',
@@ -61,24 +61,31 @@ self.addEventListener('fetch', (event) => {
   const isNavigation = req.mode === 'navigate';
   const cacheKey = isNavigation ? './index.html' : req;
 
-  // Red primero: con conexión siempre se usa la versión publicada;
-  // sin conexión (o si la red falla) se sirve la copia guardada.
+  // Copia guardada: primero la exacta; si no, la misma ruta de otra versión
+  // (p. ej. styles.css?v=16 mientras ?v=17 aún no está disponible).
+  const fromCache = async () =>
+    (await caches.match(cacheKey, { ignoreSearch: isNavigation })) ||
+    (await caches.match(cacheKey, { ignoreSearch: true }));
+
+  // Red primero: con conexión siempre se usa la versión publicada; si no hay red
+  // o el servidor falla (GitHub da 503 unos segundos al publicar), la copia guardada.
   event.respondWith(
     caches.open(CACHE_VERSION).then(async (cache) => {
+      let res;
       try {
         // Las navegaciones no admiten opciones extra en fetch(req, …): se piden por URL.
         const fresh = isNavigation
           ? new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' })
           : new Request(req, { cache: 'no-cache' });
-        const res = await fetch(fresh);
+        res = await fetch(fresh);
         // Una navegación no puede responderse con una redirección ya seguida.
         if (isNavigation && res.redirected) return fetch(req);
-        if (res.ok) cache.put(cacheKey, res.clone());
-        return res;
-      } catch {
-        const cached = await cache.match(cacheKey, { ignoreSearch: isNavigation });
-        return cached || Response.error();
-      }
+        if (res.ok) {
+          cache.put(cacheKey, res.clone());
+          return res;
+        }
+      } catch { /* sin conexión */ }
+      return (await fromCache()) || res || Response.error();
     })
   );
 });
