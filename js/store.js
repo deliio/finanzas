@@ -87,7 +87,7 @@ function migrate(raw) {
   const s = { ...def, ...raw };
   s.settings = { ...def.settings, ...raw.settings };
   s.categories = normalizeCategories(s.categories);
-  s.transactions = s.transactions.map((t) => ({ tags: [], account: '', ...t }));
+  s.transactions = s.transactions.map((t) => ({ tags: [], account: '', revisado: true, ...t }));
   // v2 → v3: "Pagado por papi" pasa a ser un pagador configurable.
   const hadPapi = s.transactions.some((t) => t.papi) || s.recurring.some((r) => r.papi);
   if (hadPapi && !s.settings.payers.some((p) => p.id === 'papi')) {
@@ -137,8 +137,12 @@ export function addTransaction(tx, { silent = false } = {}) {
     note: tx.note ?? '',
     account: tx.account || '', // id de la cuenta de liquidez de la que sale/entra
     tags: normalizeTags(tx.tags),
+    // Bypass: con la revisión desactivada todo entra revisado. Con ella activada,
+    // lo que llega solo (Atajos, URL, recurrentes) entra pendiente de revisar.
+    revisado: !(state.settings.reviewEnabled && tx.needsReview),
     createdAt: new Date().toISOString(),
   };
+  if (tx.source) record.source = tx.source; // 'atajo' | 'url' | 'recurrente'
   // Campos opcionales: solo se guardan si aplican.
   if (tx.split > 1) record.split = Math.round(tx.split); // nº de personas
   if (tx.currency && tx.currency !== 'EUR') {
@@ -154,6 +158,32 @@ export function addTransaction(tx, { silent = false } = {}) {
   state.transactions.push(record);
   if (!silent) persist();
   return record;
+}
+
+export function updateTransaction(id, patch) {
+  const t = state.transactions.find((x) => x.id === id);
+  if (!t) return;
+  Object.assign(t, patch);
+  persist();
+}
+
+/** Movimientos pendientes de revisar, del más antiguo al más reciente. */
+export const pendingReview = () =>
+  state.transactions.filter((t) => t.revisado === false).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+export function markAllReviewed() {
+  state.transactions.forEach((t) => { if (t.revisado === false) t.revisado = true; });
+  persist();
+}
+
+/** Categoría que usaste la última vez con ese mismo concepto (p. ej. "Mercadona" → Supermercado). */
+export function suggestCategory(description, type = 'expense') {
+  const key = String(description || '').trim().toLowerCase();
+  if (!key) return '';
+  const valid = new Set(state.categories.filter((c) => c.kind === type).map((c) => c.id));
+  const hit = [...state.transactions].reverse()
+    .find((t) => t.type === type && valid.has(t.category) && t.revisado !== false && (t.description || '').trim().toLowerCase() === key);
+  return hit?.category ?? '';
 }
 
 export function deleteTransaction(id) {
@@ -392,6 +422,7 @@ export function runRecurring(today = todayISO()) {
       addTransaction({
         type: r.type, amount: r.amount, description: r.name, category: r.category,
         account: r.account, tags: r.tags, paidBy: r.paidBy, date: `${key}-${String(day).padStart(2, '0')}`, recurringId: r.id,
+        needsReview: true, source: 'recurrente',
       }, { silent: true });
       r.lastMonth = key;
       added++;

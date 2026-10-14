@@ -2,7 +2,7 @@
 // clave de Finnhub y borrado de datos.
 
 import { getState, replaceState, resetState, todayISO, setSetting, addRecurring, updateRecurring, deleteRecurring,
-  runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget, payers, payerById, addPayer, updatePayer, removePayer, setCategoryColor } from '../store.js';
+  runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget, payers, payerById, addPayer, updatePayer, removePayer, setCategoryColor, pendingReview, markAllReviewed } from '../store.js';
 import { fetchQuote, estimateHolding } from '../market.js';
 import { stateToCSV, csvToState, powerBIFiles } from '../csv.js';
 import { toast, esc, usd, money, icon, openSheet, parseAmount, amountToInput } from '../ui.js';
@@ -14,7 +14,16 @@ export function render(root) {
     <div class="topbar" style="margin-bottom:0"><a class="left" href="#/inicio">‹ Inicio</a><span></span><span></span></div>
     <header class="page-header" style="margin-top:0"><h1>Ajustes</h1></header>
 
-    <div class="section-title" style="margin-top:8px">Pagos recurrentes <button class="link-btn" data-action="add-rec">+ Añadir</button></div>
+    <div class="section-title" style="margin-top:8px">Revisión</div>
+    <div class="field-group" style="margin-bottom:0">
+      <div class="field"><label for="rev-toggle" class="wide">Revisión manual diaria</label>
+        <span class="field-note">${((n) => (settings.reviewEnabled && n ? `${n} pendiente${n === 1 ? '' : 's'}` : ''))(pendingReview().length)}</span>
+        <input id="rev-toggle" type="checkbox" class="switch" role="switch" ${settings.reviewEnabled ? 'checked' : ''}></div>
+    </div>
+    <p class="hint" style="margin:8px 4px 0">Activada: los pagos que llegan por Atajos y los recurrentes se guardan al momento
+      como <b>pendientes</b> y los confirmas después desde Inicio. Desactivada: todo entra ya revisado.</p>
+
+    <div class="section-title">Pagos recurrentes <button class="link-btn" data-action="add-rec">+ Añadir</button></div>
     ${recurring.length ? `<div class="list">${recurring.map((r) => {
       const cat = categoryById(r.category);
       return `<button class="row ${r.active ? '' : 'is-paused'}" data-rec="${esc(r.id)}">
@@ -109,6 +118,15 @@ export function render(root) {
     const p = e.target.closest('[data-payer]');
     if (p) openPayerSheet(p.dataset.payer, () => render(root));
   };
+
+  root.querySelector('#rev-toggle').addEventListener('change', (e) => {
+    const on = e.target.checked;
+    setSetting('reviewEnabled', on);
+    const pending = pendingReview().length;
+    if (!on && pending && confirm(`Tienes ${pending} movimiento${pending === 1 ? '' : 's'} sin revisar. ¿Marcarlos como revisados?`)) markAllReviewed();
+    toast(on ? 'Revisión activada' : 'Revisión desactivada');
+    render(root);
+  });
 
   root.querySelector('#fh-save').addEventListener('click', async (e) => {
     const btn = e.currentTarget;

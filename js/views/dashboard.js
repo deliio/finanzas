@@ -2,7 +2,7 @@
 // categoría y últimos movimientos.
 
 import { transactionsInMonthKey, transactionsSorted, categoryById, categoriesOf, availableMonths, bucketOf,
-  payerById, payerBucketId, openDebts, debtRemaining } from '../store.js';
+  payerById, payerBucketId, openDebts, debtRemaining, getState, pendingReview } from '../store.js';
 import { money, ring, txRow, esc, icon, privacyButton, monthSelect, getSelectedMonth, setSelectedMonth, isCurrentMonth, monthLabel } from '../ui.js';
 import { spendingDonuts } from '../charts.js';
 import { pastePayment } from './nuevo-gasto.js';
@@ -48,6 +48,15 @@ export function render(root, { navigate }) {
           <button type="button" class="pill-btn" id="paste-pay" aria-label="Pegar pago de Apple Pay">${icon('card')} Pegar</button>
         </div>
       </header>
+
+      ${(() => {
+        const n = getState().settings.reviewEnabled ? pendingReview().length : 0;
+        return n ? `<a class="review-banner" href="#/revisar">
+          <span class="review-count num-plain">${n}</span>
+          <span class="main">Tienes ${n} movimiento${n === 1 ? '' : 's'} pendiente${n === 1 ? '' : 's'} de revisar</span>
+          ${icon('chevron')}
+        </a>` : '';
+      })()}
 
       <section class="card hero">
         <div class="label">Balance ${isCurrentMonth(key) ? 'del mes' : `de ${esc(monthLabel(key).toLowerCase())}`}</div>

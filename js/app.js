@@ -8,14 +8,15 @@ import * as ajustes from './views/ajustes.js';
 import * as analisis from './views/analisis.js';
 import * as mapa from './views/mapa.js';
 import * as informes from './views/informes.js';
-import { readPrefillFromURL } from './views/nuevo-gasto.js';
+import { readPrefillFromURL, quickSavePending } from './views/nuevo-gasto.js';
+import * as revisar from './views/revisar.js';
 import { getState, setSetting, runRecurring } from './store.js';
 import { snapshotNetWorth } from './networth.js';
 import { toast, icon } from './ui.js';
 
-const routes = { inicio: dashboard, movimientos, nuevo, patrimonio, ajustes, analisis, mapa, informes };
+const routes = { inicio: dashboard, movimientos, nuevo, patrimonio, ajustes, analisis, mapa, informes, revisar };
 // Vistas sin pestaña propia: resaltan la pestaña de la que cuelgan.
-const TAB_OF = { analisis: 'informes', mapa: 'informes', ajustes: 'inicio' };
+const TAB_OF = { analisis: 'informes', mapa: 'informes', ajustes: 'inicio', revisar: 'inicio' };
 const viewEl = document.getElementById('view');
 let cleanup = null;
 
@@ -34,7 +35,15 @@ document.addEventListener('click', (e) => {
 // Leemos los parámetros UNA vez al arrancar, y limpiamos la URL para que un
 // recargo (o volver a abrir la app) no vuelva a rellenar el formulario.
 let pendingPrefill = readPrefillFromURL();
-if (pendingPrefill) {
+if (pendingPrefill && getState().settings.reviewEnabled && pendingPrefill.amount) {
+  // Revisión activada: se guarda al momento como pendiente y se queda en Inicio.
+  const p = { ...pendingPrefill, source: 'url' };
+  pendingPrefill = null;
+  history.replaceState(null, '', location.pathname + '#/inicio');
+  quickSavePending(p)
+    .then(() => { toast('Guardado · pendiente de revisar'); if (currentRoute() === 'inicio') render(); })
+    .catch(() => navigate('nuevo', p));
+} else if (pendingPrefill) {
   history.replaceState(null, '', location.pathname + '#/nuevo');
 }
 

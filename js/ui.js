@@ -117,6 +117,7 @@ export const currencySymbol = (c) => CURRENCY_SYMBOL[c] ?? c;
 
 export function txRow(tx, cat) {
   const extras = [];
+  if (tx.revisado === false) extras.push('<span class="review-tag">Por revisar</span>');
   if (tx.paidBy) extras.push(`<span class="papi-tag">${esc(payerById(tx.paidBy).name)}</span>`);
   if (tx.split) extras.push(`÷${splitCount(tx)}`);
   if (tx.currency) extras.push(`<span class="num">${amountToInput(tx.originalAmount)} ${currencySymbol(tx.currency)}</span>`);

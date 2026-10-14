@@ -610,3 +610,36 @@ body.privacy .map-box { filter: blur(10px); }
 .color-input::-webkit-color-swatch { border: 0; border-radius: 8px; }
 
 .pill-btn { white-space: nowrap; }
+
+/* ---------- v16: revisión de movimientos ------------------------------- */
+.review-banner {
+  display: flex; align-items: center; gap: 12px; margin: -4px 0 14px; padding: 14px 16px;
+  border-radius: var(--radius-lg); background: var(--text); color: #000; font-weight: 600; font-size: 15px;
+}
+.review-banner .main { flex: 1; min-width: 0; line-height: 1.3; }
+.review-banner .ico { width: 18px; height: 18px; flex: none; }
+.review-count {
+  min-width: 30px; height: 30px; padding: 0 8px; border-radius: 15px; background: #000; color: #fff;
+  display: grid; place-items: center; font-size: 15px; font-weight: 700; flex: none;
+}
+.review-tag { color: var(--text); font-weight: 600; background: var(--card-3); padding: 0 6px; border-radius: 5px; }
+.review-step { justify-self: end; font-size: 14px; font-variant-numeric: tabular-nums; }
+.review-progress { margin: -6px 0 16px; height: 4px; }
+.review-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 6px; }
+.review-meta .chip { font-size: 12.5px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; }
+.review-meta .chip .ico { width: 12px; height: 12px; }
+.review-missing { font-size: 12.5px; font-weight: 600; color: #000; background: var(--text); padding: 2px 8px; border-radius: 999px; letter-spacing: 0; }
+.review-actions { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
+.review-actions .btn { max-width: none; margin: 0; }
+.review-actions .btn .ico { width: 18px; height: 18px; }
+.review-actions .btn-danger { background: var(--card-2); }
+.review-done { min-height: 70dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; }
+.review-done h2 { font-size: 28px; margin: 14px 0 2px; letter-spacing: -0.02em; }
+.review-done p { margin: 0 0 24px; }
+.review-done .btn { max-width: 260px; }
+.review-done-icon {
+  width: 84px; height: 84px; border-radius: 50%; background: var(--text); color: #000;
+  display: grid; place-items: center; animation: pop .45s cubic-bezier(.2, 1.4, .4, 1);
+}
+.review-done-icon .ico { width: 42px; height: 42px; stroke-width: 2.4; }
+@keyframes pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }

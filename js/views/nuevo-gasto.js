@@ -6,7 +6,7 @@
 // Portapapeles (PWA instalada): FINANZAS|<Importe>|<Comercio>[|<Latitud>|<Longitud>]  ·  INGRESO|<Importe>|<Origen>
 // Ubicación por URL: &lat=40.4168&lon=-3.7038
 
-import { addTransaction, categoriesOf, todayISO, getState, setSetting, allTags, normalizeTags, round2, validLocation,
+import { addTransaction, categoriesOf, todayISO, getState, setSetting, allTags, normalizeTags, round2, validLocation, suggestCategory,
   payers, payerById, addDebt, knownDebtors, persist } from '../store.js';
 import { fetchRateToEur } from '../market.js';
 import { esc, parseAmount, amountToInput, toast, icon, money, currencySymbol } from '../ui.js';
@@ -108,6 +108,31 @@ export function parseClipboardPayment(text = '') {
   return null;
 }
 
+/**
+ * Con la revisión activada, lo que llega del Atajo o por URL se guarda al momento como
+ * pendiente (sin pasar por el formulario) y se revisa después en la bandeja.
+ * Categoría: la indicada, la que usaste la última vez en ese comercio o "Sin categoría".
+ */
+export async function quickSavePending(prefill) {
+  const type = prefill.type === 'income' ? 'income' : 'expense';
+  const valid = categoriesOf(type).some((c) => c.id === prefill.category);
+  const category = valid ? prefill.category : suggestCategory(prefill.description, type);
+  const currency = prefill.currency || 'EUR';
+  const { rate } = await fetchRateToEur(currency, prefill.date || todayISO()); // lanza si no hay conexión
+  const liquid = getState().accounts.filter((a) => a.kind === 'liquidez').map((a) => a.id);
+  const last = getState().settings.lastAccount;
+  const tx = addTransaction({
+    type, category, amount: round2(prefill.amount * rate),
+    description: prefill.description || '', date: prefill.date || todayISO(),
+    account: liquid.includes(last) ? last : '', tags: prefill.tags || [],
+    currency, originalAmount: prefill.amount, fxRate: rate,
+    location: prefill.location, needsReview: true,
+    source: prefill.source === 'clipboard' ? 'atajo' : 'url',
+  });
+  if (prefill.source === 'clipboard') navigator.clipboard?.writeText('').catch(() => {});
+  return tx;
+}
+
 /** Lee el portapapeles (requiere un toque del usuario) y abre el formulario relleno. */
 export async function pastePayment(navigate) {
   let text = '';
@@ -118,6 +143,13 @@ export async function pastePayment(navigate) {
   }
   const prefill = parseClipboardPayment(text);
   if (!prefill) return toast('No hay ningún pago copiado');
+  if (getState().settings.reviewEnabled && prefill.amount) {
+    try {
+      await quickSavePending(prefill);
+      toast('Guardado · pendiente de revisar');
+      return navigate('inicio');
+    } catch { /* sin conexión para la divisa: seguimos con el formulario */ }
+  }
   navigate('nuevo', prefill);
 }
 
