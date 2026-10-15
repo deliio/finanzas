@@ -1,12 +1,12 @@
 // Service worker: red primero (siempre la última versión) con copia offline de respaldo.
 // Sube CACHE_VERSION cada vez que publiques cambios para forzar la actualización.
-const CACHE_VERSION = 'finanzas-v19';
+const CACHE_VERSION = 'finanzas-v20';
 
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './css/styles.css?v=19',
+  './css/styles.css?v=20',
   './js/app.js',
   './js/store.js',
   './js/ui.js',

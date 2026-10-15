@@ -34,10 +34,24 @@ async function call(params, config = mailboxConfig()) {
   return data;
 }
 
+/** "Papi", " papi " y "PAPÍ" son el mismo usuario (mayúsculas, tildes y espacios no importan). */
+export const sameUser = (a, b) => {
+  const n = (s) => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/s+/g, ' ');
+  return n(a) === n(b);
+};
+
+/**
+ * Pide todos los pagos y se queda con los de este usuario comparando de forma tolerante
+ * (el filtro del script es exacto). Sin nombre solo recoge los pagos enviados sin nombre.
+ */
+async function pullMine(config) {
+  const { items = [] } = await call({ action: 'pull', user: '' }, config);
+  return items.filter((it) => sameUser(it.user, config.user));
+}
+
 /** Comprueba la conexión sin importar nada. Devuelve cuántos pagos esperan. */
 export async function testMailbox(config) {
-  const data = await call({ action: 'pull', user: config.user || '' }, config);
-  return (data.items || []).length;
+  return (await pullMine(config)).length;
 }
 
 const coord = (s) => Number(String(s ?? '').trim().replace(',', '.').replace(/[^\d.-]/g, ''));
@@ -54,8 +68,7 @@ export async function pullMailbox() {
   if (!mailboxReady() || busy || navigator.onLine === false) return 0;
   busy = true;
   try {
-    const { user = '' } = mailboxConfig();
-    const { items = [] } = await call({ action: 'pull', user });
+    const items = await pullMine(mailboxConfig());
     if (!items.length) return 0;
 
     const seen = new Set(getState().settings.mailboxSeen || []);
