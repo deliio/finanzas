@@ -155,6 +155,7 @@ export function addTransaction(tx, { silent = false } = {}) {
     createdAt: new Date().toISOString(),
   };
   if (tx.source) record.source = tx.source; // 'atajo' | 'url' | 'recurrente' | 'buzon'
+  if (tx.walletCard) record.walletCard = String(tx.walletCard).slice(0, 60); // tarjeta de Wallet con la que se pagó
   if (tx.receivedAt && !Number.isNaN(Date.parse(tx.receivedAt))) record.receivedAt = new Date(tx.receivedAt).toISOString(); // cuándo se pagó/envió
   // Campos opcionales: solo se guardan si aplican.
   if (tx.split > 1) record.split = Math.round(tx.split); // nº de personas
@@ -431,6 +432,33 @@ export function deleteHolding(id) {
 export function setMarketData(quotes, fx) {
   state.quotes = { ...state.quotes, ...quotes };
   if (fx) state.fx = fx;
+  persist();
+}
+
+/* ---------- Tarjeta de Wallet → cuenta --------------------------------- */
+
+const cardKey = (s) => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+
+/**
+ * Cuenta de la app que corresponde a una tarjeta de Wallet ("Abanca Débito", "Visa Trade Republic"…):
+ * 1) la que elegiste antes para esa tarjeta (se aprende al revisar);
+ * 2) si no, la única cuenta/tarjeta cuyo nombre coincide en parte; si hay dudas, ninguna.
+ */
+export function accountForWalletCard(card) {
+  const key = cardKey(card);
+  if (!key) return '';
+  const payable = state.accounts.filter((a) => a.kind === 'liquidez' || a.kind === 'tarjeta');
+  const learned = (state.settings.cardMap || {})[key];
+  if (learned && payable.some((a) => a.id === learned)) return learned;
+  const hits = payable.filter((a) => { const n = cardKey(a.name); return n && (key.includes(n) || n.includes(key)); });
+  return hits.length === 1 ? hits[0].id : '';
+}
+
+/** Recuerda que esa tarjeta de Wallet es esta cuenta (para los próximos pagos). */
+export function rememberWalletCard(card, accountId) {
+  const key = cardKey(card);
+  if (!key) return;
+  state.settings.cardMap = { ...(state.settings.cardMap || {}), [key]: accountId };
   persist();
 }
 

@@ -3,7 +3,8 @@
 // (categoría, importe, concepto, fecha) y se Confirma o Elimina, y se vuelve a la lista.
 // Cuando no queda ninguno: "¡Todo al día!" y vuelta a Inicio.
 
-import { pendingReview, updateTransaction, deleteTransaction, categoriesOf, categoryById, payerById, todayISO, round2 } from '../store.js';
+import { getState, pendingReview, updateTransaction, deleteTransaction, categoriesOf, categoryById, payerById, todayISO, round2, rememberWalletCard } from '../store.js';
+import { accountOptionsHtml } from './nuevo-gasto.js';
 import { esc, icon, money, signedMoney, parseAmount, amountToInput, toast, currencySymbol } from '../ui.js';
 
 const SOURCE = { atajo: 'Apple Pay', url: 'Atajo', recurrente: 'Recurrente', buzon: 'Buzón' };
@@ -21,6 +22,8 @@ function arrived(t) {
   const label = day === today ? 'Hoy' : day === yesterday ? 'Ayer' : dayFmt.format(d).replace('.', '');
   return `${label} · ${timeFmt.format(d)}`;
 }
+
+const accountName = (t) => getState().accounts.find((a) => a.id === t.account)?.name || '';
 
 const hasCategory = (t) => categoriesOf(t.type).some((c) => c.id === t.category);
 const byArrival = (a, b) => (b.receivedAt || b.createdAt).localeCompare(a.receivedAt || a.createdAt);
@@ -62,7 +65,7 @@ export function render(root, { navigate }) {
           <span class="main">
             <div class="title">${esc(t.description || (t.type === 'income' ? 'Ingreso' : 'Gasto'))}</div>
             <div class="subtitle">${esc(arrived(t))} · ${esc(SOURCE[t.source] || 'Auto')}${t.location ? ` · ${icon('pin')}` : ''}</div>
-            <div class="subtitle">${cat ? esc(cat.name) : '<span class="review-missing small">Sin categoría</span>'}${t.paidBy ? ` · lo paga ${esc(payerById(t.paidBy).name)}` : ''}</div>
+            <div class="subtitle">${cat ? esc(cat.name) : '<span class="review-missing small">Sin categoría</span>'}${t.paidBy ? ` · lo paga ${esc(payerById(t.paidBy).name)}` : ''}${accountName(t) ? ` · ${esc(accountName(t))}` : ''}</div>
           </span>
           <span class="trail num ${t.type === 'income' ? 'pos' : 'neg'}">${signedMoney(t.amount, t.type)}</span>
         </button>`;
@@ -88,6 +91,7 @@ export function render(root, { navigate }) {
     if (!t) return showList();
     const cats = categoriesOf(t.type);
     let category = hasCategory(t) ? t.category : '';
+    const payable = getState().accounts.filter((a) => a.kind === 'liquidez' || a.kind === 'tarjeta');
 
     root.innerHTML = `
       <div class="topbar">
@@ -115,7 +119,10 @@ export function render(root, { navigate }) {
           <input id="rv-desc" type="text" autocomplete="off" placeholder="Comercio o descripción" value="${esc(t.description)}"></div>
         <div class="field"><label for="rv-date">Fecha</label>
           <input id="rv-date" type="date" value="${esc(t.date)}"></div>
+        ${!t.paidBy && payable.length ? `<div class="field"><label for="rv-acc">Cuenta</label>
+          <select id="rv-acc">${accountOptionsHtml(payable, t.account)}<option value="" ${t.account ? '' : 'selected'}>Ninguna</option></select></div>` : ''}
       </div>
+      ${t.walletCard ? `<p class="hint" style="margin:-12px 4px 18px">Pagado con <b>${esc(t.walletCard)}</b> en Wallet. ${t.account ? 'Si eliges otra cuenta' : 'Elige su cuenta y'}, la recordaré para los próximos pagos con esa tarjeta.</p>` : ''}
 
       <div class="section-title" style="margin-top:0">Categoría ${category ? '' : '<span class="review-missing">Sin categoría</span>'}</div>
       <div class="cat-grid">${cats.map((c) => `
@@ -155,10 +162,13 @@ export function render(root, { navigate }) {
       const amount = parseAmount(amountEl.value);
       if (!(amount > 0)) return toast('Importe no válido');
       if (!category) return toast('Elige una categoría');
+      const account = $('#rv-acc') ? $('#rv-acc').value : t.account;
       updateTransaction(t.id, {
         amount: round2(amount), description: $('#rv-desc').value.trim(),
-        date: $('#rv-date').value || t.date || todayISO(), category, revisado: true,
+        date: $('#rv-date').value || t.date || todayISO(), category, account, revisado: true,
       });
+      // Aprende la tarjeta de Wallet → cuenta para que los próximos pagos lleguen ya bien.
+      if (t.walletCard && account) rememberWalletCard(t.walletCard, account);
       done++;
       toast('Confirmado');
       showList();

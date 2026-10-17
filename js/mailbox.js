@@ -3,11 +3,11 @@
 // pendientes de revisar. Un mismo buzón sirve para varias personas (campo "usuario").
 //
 // API del buzón (Apps Script desplegado como aplicación web):
-//   GET ?action=pull&token=…&user=…      → { ok, items: [{ id, at, user, type, amount, merchant, lat, lon }] }
+//   GET ?action=pull&token=…&user=…      → { ok, items: [{ id, at, user, type, amount, merchant, lat, lon, card }] }
 //   GET ?action=ack&token=…&ids=a,b,c    → borra esos pagos del buzón
-//   POST { token, user, type, amount, merchant, lat, lon }  (lo usa el Atajo)
+//   POST { token, user, type, amount, merchant, lat, lon, card }  (lo usa el Atajo; card = tarjeta de Wallet)
 
-import { getState, setSetting, addTransaction, suggestCategory, validLocation, round2, todayISO } from './store.js';
+import { getState, setSetting, addTransaction, suggestCategory, validLocation, round2, todayISO, accountForWalletCard } from './store.js';
 import { parseAmount } from './ui.js';
 import { fetchRateToEur } from './market.js';
 
@@ -36,7 +36,7 @@ async function call(params, config = mailboxConfig()) {
 
 /** "Papi", " papi " y "PAPÍ" son el mismo usuario (mayúsculas, tildes y espacios no importan). */
 export const sameUser = (a, b) => {
-  const n = (s) => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/s+/g, ' ');
+  const n = (s) => String(s ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
   return n(a) === n(b);
 };
 
@@ -71,7 +71,7 @@ export async function pullMailbox() {
     const items = await pullMine(mailboxConfig());
     if (!items.length) return 0;
     // Guardamos lo último que llegó tal cual, para poder ver en Ajustes si traía ubicación.
-    const log = items.map((i) => ({ at: i.at, type: i.type, amount: i.amount, merchant: i.merchant, lat: i.lat, lon: i.lon }));
+    const log = items.map((i) => ({ at: i.at, type: i.type, amount: i.amount, merchant: i.merchant, lat: i.lat, lon: i.lon, card: i.card }));
     setSetting('mailboxLog', [...log, ...(getState().settings.mailboxLog || [])].slice(0, 8));
 
     const seen = new Set(getState().settings.mailboxSeen || []);
@@ -92,10 +92,13 @@ export async function pullMailbox() {
         try { ({ rate } = await fetchRateToEur(currency, date)); } catch { /* sin cambio: se revisará el importe */ }
       }
       const merchant = String(it.merchant || '').trim();
+      const card = String(it.card || '').trim();
+      // Cuenta: la de la tarjeta con la que se pagó (si se reconoce) o la última usada.
+      const account = accountForWalletCard(card) || (liquid.includes(last) ? last : '');
       addTransaction({
         type, amount: round2(Math.abs(original) * rate), description: merchant,
         category: suggestCategory(merchant, type), date,
-        account: liquid.includes(last) ? last : '',
+        account, walletCard: card,
         currency, originalAmount: Math.abs(original), fxRate: rate,
         location: validLocation({ lat: coord(it.lat), lon: coord(it.lon) }),
         needsReview: true, forceReview: true, source: 'buzon', receivedAt: it.at,
@@ -122,8 +125,8 @@ function hoja_() {
   let sh = ss.getSheetByName(HOJA);
   if (!sh) {
     sh = ss.insertSheet(HOJA);
-    sh.getRange('A:H').setNumberFormat('@'); // todo como texto (importes "23,40 €" tal cual)
-    sh.appendRow(['id', 'fecha', 'usuario', 'tipo', 'importe', 'comercio', 'lat', 'lon']);
+    sh.getRange('A:I').setNumberFormat('@'); // todo como texto (importes "23,40 €" tal cual)
+    sh.appendRow(['id', 'fecha', 'usuario', 'tipo', 'importe', 'comercio', 'lat', 'lon', 'tarjeta']);
   }
   return sh;
 }
@@ -136,7 +139,7 @@ function guardar_(d) {
   if (String(d.token) !== TOKEN) return json_({ ok: false, error: 'token' });
   const id = Utilities.getUuid();
   hoja_().appendRow([id, new Date().toISOString(), String(d.user || ''), String(d.type || 'expense'),
-    String(d.amount || ''), String(d.merchant || ''), String(d.lat || ''), String(d.lon || '')]);
+    String(d.amount || ''), String(d.merchant || ''), String(d.lat || ''), String(d.lon || ''), String(d.card || '')]);
   return json_({ ok: true, id: id });
 }
 
@@ -161,7 +164,7 @@ function doGet(e) {
   }
   const items = filas.slice(1)
     .filter(function (r) { return r[0] && (!p.user || String(r[2]) === String(p.user)); })
-    .map(function (r) { return { id: r[0], at: r[1], user: r[2], type: r[3], amount: r[4], merchant: r[5], lat: r[6], lon: r[7] }; });
+    .map(function (r) { return { id: r[0], at: r[1], user: r[2], type: r[3], amount: r[4], merchant: r[5], lat: r[6], lon: r[7], card: r[8] || '' }; });
   return json_({ ok: true, items: items });
 }
 `;
