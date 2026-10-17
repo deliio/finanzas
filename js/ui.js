@@ -127,7 +127,6 @@ export function txRow(tx, cat) {
     <span class="main">
       <div class="title">${esc(tx.description || cat.name)}</div>
       <div class="subtitle">${esc(cat.name)} · ${shortDate(tx.date)}${extras.length ? ' · ' + extras.join(' · ') : ''}</div>
-      ${tx.tags?.length ? `<div class="chips">${tx.tags.map((t) => `<span class="chip">#${esc(t)}</span>`).join('')}</div>` : ''}
     </span>
     <span class="trail num ${tx.type === 'income' ? 'pos' : 'neg'}">${signedMoney(tx.amount, tx.type)}</span>
   </button>`;

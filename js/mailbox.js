@@ -70,6 +70,9 @@ export async function pullMailbox() {
   try {
     const items = await pullMine(mailboxConfig());
     if (!items.length) return 0;
+    // Guardamos lo último que llegó tal cual, para poder ver en Ajustes si traía ubicación.
+    const log = items.map((i) => ({ at: i.at, type: i.type, amount: i.amount, merchant: i.merchant, lat: i.lat, lon: i.lon }));
+    setSetting('mailboxLog', [...log, ...(getState().settings.mailboxLog || [])].slice(0, 8));
 
     const seen = new Set(getState().settings.mailboxSeen || []);
     const liquid = getState().accounts.filter((a) => a.kind === 'liquidez').map((a) => a.id);

@@ -18,6 +18,8 @@ export const DEFAULT_CATEGORIES = [
   { id: 'suscripciones', kind: 'expense', name: 'Suscripciones', icon: 'repeat',    budget: 50 },
   { id: 'otros',         kind: 'expense', name: 'Otros',         icon: 'box',       budget: 0 },
   { id: 'nomina',        kind: 'income',  name: 'Nómina',        icon: 'briefcase', budget: 0 },
+  { id: 'bizum',         kind: 'income',  name: 'Bizum',         icon: 'phone',     budget: 0 },
+  { id: 'regalo',        kind: 'income',  name: 'Regalo',        icon: 'gift',      budget: 0 },
   { id: 'otros-ingresos',kind: 'income',  name: 'Otros',         icon: 'plus',      budget: 0 },
 ];
 
@@ -96,6 +98,13 @@ function migrate(raw) {
   const fromPapi = ({ papi, ...x }) => (papi ? { ...x, paidBy: 'papi' } : x);
   s.transactions = s.transactions.map(fromPapi);
   s.recurring = s.recurring.map(fromPapi);
+  if (!s.settings.incomeCatsV4) {
+    const otros = s.categories.findIndex((c) => c.id === 'otros-ingresos');
+    const extra = DEFAULT_CATEGORIES.filter((d) => ['bizum', 'regalo'].includes(d.id) && !s.categories.some((c) => c.id === d.id))
+      .map((d) => ({ ...d, color: CATEGORY_PALETTE[0] }));
+    if (extra.length) s.categories.splice(otros >= 0 ? otros : s.categories.length, 0, ...extra);
+    s.settings.incomeCatsV4 = true;
+  }
   s.version = def.version;
   return s;
 }
@@ -150,9 +159,9 @@ export function addTransaction(tx, { silent = false } = {}) {
     Object.assign(record, { currency: tx.currency, originalAmount: round2(tx.originalAmount), fxRate: tx.fxRate });
   }
   if (tx.recurringId) record.recurringId = tx.recurringId;
-  // Dónde se pagó (mapa de calor): solo gastos y coordenadas válidas.
+  // Dónde se pagó o se recibió (el mapa de calor muestra los gastos).
   const loc = validLocation(tx.location);
-  if (loc && record.type === 'expense') record.location = loc;
+  if (loc) record.location = loc;
   // Pagado por otra persona: cuenta como gasto, pero no sale de ninguna cuenta.
   if (tx.paidBy && record.type === 'expense') { record.paidBy = tx.paidBy; record.account = ''; }
 
@@ -330,6 +339,47 @@ export function accountBreakdown(a, today = todayISO()) {
 export const accountValue = (a) => accountBreakdown(a).value;
 
 /** Presupuesto mensual de una categoría (0 = sin límite). */
+/* ---------- Categorías editables ------------------------------------- */
+
+/** Categoría a la que van los movimientos si borras la suya. */
+export const fallbackCategory = (kind) => (kind === 'income' ? 'otros-ingresos' : 'otros');
+
+export function addCategory({ kind, name, icon, color }) {
+  const base = name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'categoria';
+  let id = base, n = 2;
+  while (state.categories.some((c) => c.id === id)) id = `${base}-${n++}`;
+  const c = { id, kind, name: name.trim(), icon: ICONS[icon] ? icon : 'box', color: isHex(color) ? color : CATEGORY_PALETTE[0], budget: 0 };
+  // Las nuevas van antes de "Otros" de su tipo.
+  const i = state.categories.findIndex((x) => x.id === fallbackCategory(kind));
+  state.categories.splice(i >= 0 ? i : state.categories.length, 0, c);
+  persist();
+  return c;
+}
+
+export function updateCategory(id, patch) {
+  const c = state.categories.find((x) => x.id === id);
+  if (!c) return;
+  if (patch.name != null) c.name = patch.name.trim() || c.name;
+  if (patch.icon && ICONS[patch.icon]) c.icon = patch.icon;
+  if (isHex(patch.color)) c.color = patch.color.toLowerCase();
+  persist();
+}
+
+/** Borra una categoría y pasa sus movimientos y recurrentes a "Otros". Devuelve cuántos ha movido. */
+export function deleteCategory(id) {
+  const c = state.categories.find((x) => x.id === id);
+  if (!c || id === fallbackCategory(c.kind)) return -1;
+  const to = fallbackCategory(c.kind);
+  let moved = 0;
+  state.transactions.forEach((t) => { if (t.category === id) { t.category = to; moved++; } });
+  state.recurring.forEach((r) => { if (r.category === id) r.category = to; });
+  state.categories = state.categories.filter((x) => x.id !== id);
+  persist();
+  return moved;
+}
+
+export const categoryUsage = (id) => state.transactions.filter((t) => t.category === id).length;
+
 /** Cambia el color (#rrggbb) de una categoría. */
 export function setCategoryColor(categoryId, color) {
   const c = state.categories.find((x) => x.id === categoryId);

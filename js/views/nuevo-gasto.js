@@ -163,6 +163,7 @@ export function render(root, { prefill, navigate }) {
     rate: 1,                             // € por 1 unidad de la divisa
     rateState: 'ok',                     // ok | loading | error
     split: 1,                            // nº de personas entre las que se divide (1 = no compartido)
+    people: [],                          // el resto de personas: { name, amount (null = parte igual) }
     paidBy: '',                          // '' = lo pagas tú; si no, id de quien lo paga (no sale de tus cuentas)
     location: prefill?.location ?? null, // { lat, lon } para el mapa de calor
     locState: prefill?.location ? 'ok' : 'off', // off | loading | ok | denied | error
@@ -179,7 +180,6 @@ export function render(root, { prefill, navigate }) {
     form.category = prefill.category;
   }
 
-  const suggestedTags = allTags().slice(0, 8).map((t) => t.tag);
   const payerList = payers();
   const debtors = knownDebtors();
 
@@ -231,11 +231,8 @@ export function render(root, { prefill, navigate }) {
           <button type="button" data-step="1" aria-label="Una persona más"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg></button>
         </div>
       </div>
-      <div class="field" id="nt-debtors-row" hidden>
-        <label for="nt-debtors">Te deben</label>
-        <input id="nt-debtors" type="text" list="nt-debtors-list" placeholder="Nombres: Juan, Ana" autocomplete="off">
-        <datalist id="nt-debtors-list">${debtors.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
-      </div>
+      <div id="nt-people" hidden></div>
+      <datalist id="nt-debtors-list">${debtors.map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
       ${payerList.length ? `<div class="field" id="nt-payer-row">
         <label>Lo paga</label>
         <div class="pill-choice" role="group" aria-label="Quién lo paga">
@@ -248,14 +245,7 @@ export function render(root, { prefill, navigate }) {
         <span class="field-note" id="nt-loc-note"></span>
         <input id="nt-loc" type="checkbox" class="switch" role="switch">
       </div>
-      <div class="field">
-        <label for="nt-tags">Etiquetas</label>
-        <input id="nt-tags" type="text" placeholder="#viajes #mecanica" autocomplete="off"
-               autocapitalize="off" spellcheck="false" value="${esc((prefill?.tags || []).map((t) => '#' + t).join(' '))}">
-      </div>
     </div>
-    ${suggestedTags.length ? `<div class="chips tag-suggestions">${suggestedTags.map((t) =>
-      `<button type="button" class="chip" data-addtag="${esc(t)}">#${esc(t)}</button>`).join('')}</div>` : ''}
 
     <div class="section-title" style="margin-top:0">Categoría</div>
     <div class="cat-grid" id="nt-cats"></div>
@@ -277,7 +267,6 @@ export function render(root, { prefill, navigate }) {
     $('#nt-split-row').hidden = form.type === 'income';
     if ($('#nt-payer-row')) $('#nt-payer-row').hidden = form.type === 'income';
     if (form.type === 'income') { form.split = 1; form.paidBy = ''; }
-    $('#nt-loc-row').hidden = form.type === 'income';
     renderPayer();
     renderLoc();
     $('#nt-cats').innerHTML = categoriesOf(form.type).map((c) => `
@@ -316,12 +305,49 @@ export function render(root, { prefill, navigate }) {
     );
   }
 
-  /** Nombres escritos en "Te deben" (como mucho, personas − 1). */
-  const debtorNames = () => [...new Set(($('#nt-debtors')?.value || '').split(/[,;]+/).map((s) => s.trim()).filter(Boolean))]
-    .slice(0, Math.max(0, form.split - 1));
+  /* ---- Reparto: cada persona con su nombre y lo que paga (por defecto, a partes iguales) ---- */
 
-  /** Importe final en € (divisa convertida y, si aplica, dividido entre las personas). */
-  const finalEur = () => (form.amount ? round2(form.amount * form.rate / form.split) : 0);
+  const sharing = () => form.type === 'expense' && form.split > 1 && !form.paidBy;
+
+  /** Parte de cada persona (en la divisa del formulario) y la tuya, que es lo que queda. */
+  function shares() {
+    const total = form.amount || 0;
+    const people = sharing() ? form.people : [];
+    const manual = people.filter((p) => p.amount != null).reduce((s, p) => s + p.amount, 0);
+    const autoN = people.filter((p) => p.amount == null).length;
+    const auto = round2(Math.max(0, total - manual) / (autoN + 1));
+    const theirs = people.map((p) => (p.amount != null ? p.amount : auto));
+    return { theirs, mine: round2(total - theirs.reduce((s, v) => s + v, 0)) };
+  }
+
+  /** Tu parte en € (divisa convertida). */
+  const finalEur = () => (form.amount ? round2(shares().mine * form.rate) : 0);
+
+  /** Ajusta las filas a "Dividir entre" (conserva lo ya escrito). */
+  function syncPeople() {
+    const n = Math.max(0, form.split - 1);
+    while (form.people.length < n) form.people.push({ name: '', amount: null });
+    form.people.length = n;
+    const box = $('#nt-people');
+    box.hidden = !sharing();
+    box.innerHTML = form.people.map((p, i) => `
+      <div class="field person-row">
+        <input class="p-name" data-i="${i}" list="nt-debtors-list" placeholder="Persona ${i + 2}" autocomplete="off" value="${esc(p.name)}">
+        <input class="p-amt num" data-i="${i}" inputmode="decimal" autocomplete="off" value="${p.amount != null ? esc(amountToInput(p.amount)) : ''}">
+        <span class="p-cur">${currencySymbol(form.currency)}</span>
+      </div>`).join('') +
+      `<div class="field"><label>Tu parte</label><span class="field-note num" id="nt-myshare"></span></div>
+       <p class="people-hint">Pon el nombre de quien te debe su parte (se apunta en <b>Me deben</b>). Cambia el importe si no pagáis lo mismo.</p>`;
+  }
+
+  /** Refresca los importes automáticos (placeholder) y tu parte, sin redibujar las filas. */
+  function renderShares() {
+    if (!sharing()) return;
+    const { theirs, mine } = shares();
+    root.querySelectorAll('.p-amt').forEach((el) => { el.placeholder = amountToInput(theirs[Number(el.dataset.i)]); });
+    const my = $('#nt-myshare');
+    if (my) { my.textContent = `${amountToInput(mine)} ${currencySymbol(form.currency)}`; my.classList.toggle('neg', mine < 0); }
+  }
 
   function renderHint() {
     const parts = [];
@@ -330,31 +356,22 @@ export function render(root, { prefill, navigate }) {
       else if (form.rateState === 'error') parts.push('<span class="neg">Sin tipo de cambio (¿sin conexión?)</span>');
       else parts.push(`1 ${currencySymbol(form.currency)} = ${form.rate.toFixed(4).replace('.', ',')} €`);
     }
-    if (form.amount && (form.split > 1 || form.currency !== 'EUR') && form.rateState === 'ok') {
+    if (form.amount && (form.split > 1 || form.currency !== 'EUR') && form.rateState === 'ok' && finalEur() >= 0) {
       parts.push(`Se guardará <strong class="num">${money(finalEur())}</strong>${form.split > 1 ? ' (tu parte)' : ''}`);
     }
-    const showDebtors = form.type === 'expense' && form.split > 1 && !form.paidBy;
-    if ($('#nt-debtors-row')) {
-      $('#nt-debtors-row').hidden = !showDebtors;
-      if (showDebtors && form.amount && form.rateState === 'ok') {
-        const n = debtorNames().length;
-        $('#nt-debtors').placeholder = `Nombres · ${money(finalEur())} c/u`;
-        if (n) parts.push(`${n === 1 ? 'Te debe' : 'Te deben'} <strong class="num">${money(finalEur() * n)}</strong>`);
-      }
-    }
+    if (sharing() && form.amount && shares().mine < 0) parts.push('<span class="neg">Las partes de los demás superan el total</span>');
     $('#nt-hint').innerHTML = parts.join(' · ');
     $('#nt-split-n').textContent = form.split;
     $('[data-step="-1"]').disabled = form.split <= 1;
     $('[data-step="1"]').disabled = form.split >= 20;
-    $('#nt-split-note').textContent = form.split > 1
-      ? (form.amount ? money(finalEur()) : `${form.split} personas`)
-      : 'Solo yo';
+    $('#nt-split-note').textContent = form.split > 1 ? `${form.split} personas` : 'Solo yo';
+    renderShares();
   }
 
   function validate() {
     const amount = parseAmount(amountEl.value);
     form.amount = Number.isFinite(amount) && amount > 0 ? amount : null;
-    saveBtn.disabled = !(form.amount && form.category && form.rateState === 'ok');
+    saveBtn.disabled = !(form.amount && form.category && form.rateState === 'ok' && (!sharing() || shares().mine >= 0));
     renderHint();
   }
 
@@ -391,27 +408,38 @@ export function render(root, { prefill, navigate }) {
       validate();
       return;
     }
-    const tagBtn = e.target.closest('[data-addtag]');
-    if (tagBtn) {
-      const tags = normalizeTags($('#nt-tags').value);
-      if (!tags.includes(tagBtn.dataset.addtag)) tags.push(tagBtn.dataset.addtag);
-      $('#nt-tags').value = tags.map((t) => '#' + t).join(' ');
-    }
   });
 
   // Divisa: € → £ → $ → €
   $('#nt-currency').addEventListener('click', () => {
     form.currency = CURRENCIES[(CURRENCIES.indexOf(form.currency) + 1) % CURRENCIES.length];
     $('#nt-currency').textContent = currencySymbol(form.currency);
+    root.querySelectorAll('.p-cur').forEach((el) => (el.textContent = currencySymbol(form.currency)));
     updateRate();
   });
   $('#nt-date').addEventListener('change', () => form.currency !== 'EUR' && updateRate());
 
   root.querySelectorAll('[data-payer]').forEach((b) => b.addEventListener('click', () => {
     form.paidBy = b.dataset.payer;
+    syncPeople();
     renderPayer();
+    validate();
   }));
-  $('#nt-debtors')?.addEventListener('input', renderHint);
+
+  // Filas del reparto: nombre e importe de cada persona.
+  $('#nt-people').addEventListener('input', (e) => {
+    const i = Number(e.target.dataset.i);
+    if (e.target.classList.contains('p-name')) { form.people[i].name = e.target.value; return; }
+    if (e.target.classList.contains('p-amt')) {
+      let v = e.target.value.replace(/[^\d.,]/g, '').replace('.', ',');
+      const [int, ...rest] = v.split(',');
+      if (rest.length) v = `${int},${rest.join('').slice(0, 2)}`;
+      e.target.value = v;
+      const n = parseAmount(v);
+      form.people[i].amount = v === '' || !Number.isFinite(n) ? null : n; // vacío = parte igual
+      validate();
+    }
+  });
 
   $('#nt-loc').addEventListener('change', (e) => {
     setSetting('saveLocation', e.target.checked); // se recuerda para los siguientes gastos
@@ -422,6 +450,7 @@ export function render(root, { prefill, navigate }) {
   // Gasto compartido: entre 1 (solo yo) y 20 personas.
   root.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {
     form.split = Math.min(20, Math.max(1, form.split + Number(b.dataset.step)));
+    syncPeople();
     validate();
   }));
 
@@ -438,7 +467,11 @@ export function render(root, { prefill, navigate }) {
     validate();
     if (saveBtn.disabled) return;
     const account = form.paidBy ? '' : ($('#nt-account')?.value ?? '');
-    const names = form.type === 'expense' && !form.paidBy ? debtorNames() : [];
+    const { theirs } = shares();
+    const owed = sharing()
+      ? form.people.map((p, i) => ({ person: p.name.trim(), amount: round2(theirs[i] * form.rate) })).filter((d) => d.person && d.amount > 0)
+      : [];
+    const names = owed.map((d) => d.person);
     const tx = addTransaction({
       type: form.type,
       amount: finalEur(),
@@ -446,17 +479,17 @@ export function render(root, { prefill, navigate }) {
       category: form.category,
       date: $('#nt-date').value || todayISO(),
       account,
-      tags: $('#nt-tags').value,
+      tags: prefill?.tags || [],
       split: form.split,
       paidBy: form.paidBy,
-      location: form.type === 'expense' && form.locState === 'ok' ? form.location : null,
+      location: form.locState === 'ok' ? form.location : null,
       currency: form.currency,
       originalAmount: form.amount,
       fxRate: form.rate,
     }, { silent: names.length > 0 });
     // Gasto dividido: cada persona nombrada te debe su parte (el dinero salió de tu cuenta).
-    names.forEach((person, i) => addDebt({ person, concept: tx.description || 'Gasto compartido', amount: finalEur(), account, txId: tx.id },
-      { silent: i < names.length - 1 }));
+    owed.forEach((d, i) => addDebt({ person: d.person, concept: tx.description || 'Gasto compartido', amount: d.amount, account, txId: tx.id },
+      { silent: i < owed.length - 1 }));
     if ($('#nt-account') && !form.paidBy) setSetting('lastAccount', $('#nt-account').value);
     // Vaciamos el portapapeles para no registrar el mismo pago dos veces.
     if (prefill?.source === 'clipboard') navigator.clipboard?.writeText('').catch(() => {});
@@ -471,10 +504,11 @@ export function render(root, { prefill, navigate }) {
   $('#nt-paste')?.addEventListener('click', () => pastePayment(navigate));
 
   renderType();
+  syncPeople();
   validate();
   if (form.currency !== 'EUR') updateRate();
   // Si el usuario lo dejó activado, pedimos la ubicación al abrir (salvo que venga del Atajo).
-  if (!form.location && form.type === 'expense' && getState().settings.saveLocation) requestLocation();
+  if (!form.location && getState().settings.saveLocation) requestLocation();
 
   return () => document.body.classList.remove('is-modal');
 }

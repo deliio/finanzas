@@ -12,7 +12,7 @@ export function render(root) {
     <header class="page-header"><h1>Movimientos</h1><div class="header-actions">${privacyButton()}</div></header>
     <div class="search">
       ${icon('search')}
-      <input id="q" type="search" placeholder="Buscar: Alcampo, Bizum, #viajes, 23,40, >100…"
+      <input id="q" type="search" placeholder="Buscar: Alcampo, Bizum, 23,40, >100…"
              autocomplete="off" autocapitalize="off" enterkeyhint="search" value="${esc(lastQuery)}">
     </div>
     <div class="segmented small" role="group" aria-label="Filtrar por tipo">
@@ -114,7 +114,6 @@ export function openTxSheet(id, onDone) {
     t.split && ['Compartido', `Entre ${splitCount(t)} · guardada tu parte`],
     recurring && ['Recurrente', `${esc(recurring.name)} · día ${recurring.day}`],
     t.location && ['Ubicación', `<a class="map-link" href="https://maps.apple.com/?ll=${t.location.lat},${t.location.lon}&q=${encodeURIComponent(t.description || 'Gasto')}" target="_blank" rel="noopener">Ver en Mapas</a>`],
-    t.tags?.length && ['Etiquetas', t.tags.map((x) => `#${esc(x)}`).join(' ')],
   ].filter(Boolean);
 
   const { el, close } = openSheet(`

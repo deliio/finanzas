@@ -2,11 +2,15 @@
 // clave de Finnhub y borrado de datos.
 
 import { getState, replaceState, resetState, todayISO, setSetting, addRecurring, updateRecurring, deleteRecurring,
-  runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget, payers, payerById, addPayer, updatePayer, removePayer, setCategoryColor, pendingReview, markAllReviewed } from '../store.js';
+  runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget, payers, payerById, addPayer, updatePayer, removePayer, pendingReview, markAllReviewed,
+  addCategory, updateCategory, deleteCategory, categoryUsage, fallbackCategory } from '../store.js';
+import { ICONS } from '../icons.js';
 import { fetchQuote, estimateHolding } from '../market.js';
 import { mailboxConfig, mailboxReady, newToken, testMailbox, pullMailbox, mailboxScript } from '../mailbox.js';
 import { stateToCSV, csvToState, powerBIFiles } from '../csv.js';
 import { toast, esc, usd, money, icon, openSheet, parseAmount, amountToInput } from '../ui.js';
+
+let catKind = 'expense'; // pestaña del gestor de categorías
 
 export function render(root) {
   const { transactions, accounts, settings, recurring } = getState();
@@ -61,14 +65,19 @@ export function render(root) {
       </button>`).join('')}</div>
     <p class="hint" style="margin:8px 4px 0">Las categorías con presupuesto aparecen como anillos en Inicio. Lo que te pagan otras personas no cuenta.</p>
 
-    <div class="section-title">Categorías y colores</div>
-    <div class="list">${categoriesOf('expense').map((c) => `
-      <button class="row" data-color="${esc(c.id)}">
+    <div class="section-title">Categorías <button class="link-btn" data-action="add-cat">+ Nueva</button></div>
+    <div class="segmented small" role="group" aria-label="Tipo de categoría">
+      <button type="button" data-catkind="expense" aria-pressed="${catKind === 'expense'}">Gastos</button>
+      <button type="button" data-catkind="income" aria-pressed="${catKind === 'income'}">Ingresos</button>
+    </div>
+    <div class="list">${categoriesOf(catKind).map((c) => `
+      <button class="row" data-cat-edit="${esc(c.id)}">
         <span class="icon" style="color:${c.color}">${icon(c.icon)}</span>
-        <span class="main"><div class="title">${esc(c.name)}</div></span>
-        <span class="trail color-trail"><span class="hex muted">${esc(c.color.toUpperCase())}</span><span class="swatch" style="background:${c.color}"></span></span>
+        <span class="main"><div class="title">${esc(c.name)}</div>
+          <div class="subtitle">${((n) => `${n} movimiento${n === 1 ? '' : 's'}`)(categoryUsage(c.id))}</div></span>
+        <span class="trail color-trail"><span class="swatch" style="background:${c.color}"></span>${icon('chevron')}</span>
       </button>`).join('')}</div>
-    <p class="hint" style="margin:8px 4px 0">Cada categoría usa su color en las gráficas de Inicio y Análisis.</p>
+    <p class="hint" style="margin:8px 4px 0">Toca una para cambiar su nombre, icono o color. El color se usa en las gráficas.</p>
 
     <div class="section-title">Pagado por otras personas <button class="link-btn" data-action="add-payer">+ Añadir</button></div>
     ${payers().length ? `<div class="list">${payers().map((p) => `
@@ -107,6 +116,7 @@ export function render(root) {
         Pega tu <strong style="color:var(--text)">API key</strong> completa (usa el botón de copiar del panel de Finnhub).
         Se guarda únicamente en este dispositivo y no se incluye en el CSV.
       </p>
+      <a class="btn" href="https://finnhub.io/register" target="_blank" rel="noopener" style="margin-bottom:10px">${icon('trending')} Conseguir clave gratis en Finnhub</a>
       <div class="field-group" style="margin-bottom:12px">
         <div class="field"><label for="fh-key">API key</label>
           <input id="fh-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"
@@ -134,8 +144,11 @@ export function render(root) {
         .then((n) => { toast(n ? `${n} pago${n === 1 ? '' : 's'} recibido${n === 1 ? '' : 's'}` : 'No hay pagos nuevos'); render(root); })
         .catch((err) => alert(err.message));
     }
-    const col = e.target.closest('[data-color]');
-    if (col) return openColorSheet(col.dataset.color, () => render(root));
+    const kindBtn = e.target.closest('[data-catkind]');
+    if (kindBtn) { catKind = kindBtn.dataset.catkind; return render(root); }
+    if (e.target.closest('[data-action="add-cat"]')) return openCategorySheet(null, catKind, () => render(root));
+    const catEdit = e.target.closest('[data-cat-edit]');
+    if (catEdit) return openCategorySheet(catEdit.dataset.catEdit, catKind, () => render(root));
     if (e.target.closest('[data-action="add-payer"]')) return openPayerSheet(null, () => render(root));
     const p = e.target.closest('[data-payer]');
     if (p) openPayerSheet(p.dataset.payer, () => render(root));
@@ -259,6 +272,11 @@ function openMailboxSheet(onDone) {
     <button class="btn" type="button" id="mb-copy">${icon('download')} Copiar script</button>
     <button class="btn btn-primary" type="button" id="mb-save">Guardar y probar</button>
     ${current.url ? '<button class="btn btn-danger" type="button" id="mb-del">Quitar buzón</button>' : ''}
+    ${(getState().settings.mailboxLog || []).length ? `<div class="section-title" style="font-size:16px">Últimos recibidos</div>
+      <div class="list kv">${getState().settings.mailboxLog.map((l) => `<div class="row">
+        <span class="main">${esc(l.merchant || '(sin concepto)')} · ${esc(String(l.amount))}<div class="subtitle">${esc(String(l.at).slice(0, 16).replace('T', ' '))} · ${l.type === 'income' ? 'ingreso' : 'gasto'}</div></span>
+        <span class="trail ${l.lat && l.lon ? 'pos' : 'neg'}">${l.lat && l.lon ? '📍 Con ubicación' : 'Sin ubicación'}</span></div>`).join('')}</div>
+      <p class="hint" style="margin-top:8px">Si pone "Sin ubicación", el Atajo no está enviando la ubicación (revisa el paso <b>Get Current Location</b> y los permisos de Atajos).</p>` : ''}
     <button class="btn" type="button" data-close>Cerrar</button>
   `);
   const $ = (s) => el.querySelector(s);
@@ -293,18 +311,34 @@ function openMailboxSheet(onDone) {
   });
 }
 
-/* ---------- Colores de categoría --------------------------------------- */
+/* ---------- Categorías: nombre, icono y color --------------------------- */
 
 // Sugerencias que quedan bien sobre negro (incluye verde neón).
 const SWATCHES = ['#ffffff', '#8e8e93', '#39ff14', '#32d74b', '#00e5ff', '#64d2ff', '#0a84ff', '#5e5ce6',
   '#bf5af2', '#ff2d95', '#ff375f', '#ff453a', '#ff9f0a', '#ffd60a', '#a2845e', '#30b0c7'];
 
-function openColorSheet(categoryId, onDone) {
-  const c = categoryById(categoryId);
-  let color = c.color;
+// Iconos disponibles para las categorías.
+const CAT_ICONS = ['cart', 'utensils', 'coffee', 'car', 'fuel', 'plane', 'home', 'film', 'heart', 'dumbbell', 'bag', 'gift',
+  'book', 'phone', 'repeat', 'paw', 'briefcase', 'wallet', 'bank', 'trending', 'piggy', 'card', 'plus', 'box'].filter((k) => ICONS[k]);
+
+/** Crear (id = null) o editar una categoría: nombre, icono y color. */
+function openCategorySheet(categoryId, kind, onDone) {
+  const c = categoryId ? categoryById(categoryId) : null;
+  kind = c?.kind ?? kind;
+  let color = c?.color ?? SWATCHES[2];
+  let iconName = c?.icon ?? 'box';
+  const used = c ? categoryUsage(c.id) : 0;
+  const isFallback = c && c.id === fallbackCategory(kind);
   const { el, close } = openSheet(`
-    <h3 class="sheet-title">${esc(c.name)}</h3>
-    <div class="color-preview"><span class="icon" id="cp-icon">${icon(c.icon)}</span><span class="dot-lg" id="cp-dot"></span></div>
+    <h3 class="sheet-title">${c ? 'Editar categoría' : `Nueva categoría de ${kind === 'income' ? 'ingreso' : 'gasto'}`}</h3>
+    <div class="color-preview"><span class="icon" id="cp-icon">${icon(iconName)}</span><span class="dot-lg" id="cp-dot"></span></div>
+    <div class="field-group">
+      <div class="field"><label for="cp-name">Nombre</label>
+        <input id="cp-name" maxlength="24" placeholder="Gasolina, Universidad…" autocomplete="off" value="${esc(c?.name ?? '')}"></div>
+    </div>
+    <div class="area-label">Icono</div>
+    <div class="icon-grid">${CAT_ICONS.map((k) => `<button type="button" class="icon-pick" data-icon="${k}" aria-label="${k}">${icon(k)}</button>`).join('')}</div>
+    <div class="area-label">Color</div>
     <div class="swatch-grid">${SWATCHES.map((s) => `<button type="button" class="swatch-btn" data-swatch="${s}" style="background:${s}" aria-label="${s}"></button>`).join('')}</div>
     <div class="field-group" style="margin-top:16px">
       <div class="field"><label for="cp-hex">Código</label>
@@ -314,25 +348,38 @@ function openColorSheet(categoryId, onDone) {
         <input id="cp-picker" type="color" class="color-input"></div>
     </div>
     <button class="btn btn-primary" type="button" id="cp-save">Guardar</button>
+    ${c && !isFallback ? `<button class="btn btn-danger" type="button" id="cp-del">Eliminar categoría</button>` : ''}
     <button class="btn" type="button" data-close>Cancelar</button>
+    ${isFallback ? '<p class="hint" style="margin-top:10px">"Otros" no se puede borrar: es donde van los movimientos de las categorías que elimines.</p>' : ''}
   `);
   const $ = (s) => el.querySelector(s);
   const paint = (fromInput) => {
     $('#cp-dot').style.background = color;
     $('#cp-icon').style.color = color;
+    $('#cp-icon').innerHTML = icon(iconName);
+    el.querySelectorAll('[data-icon]').forEach((b) => b.classList.toggle('selected', b.dataset.icon === iconName));
     if (fromInput !== 'hex') $('#cp-hex').value = color.toUpperCase();
     if (fromInput !== 'picker') $('#cp-picker').value = color;
     el.querySelectorAll('[data-swatch]').forEach((b) => b.classList.toggle('selected', b.dataset.swatch === color));
   };
   el.querySelectorAll('[data-swatch]').forEach((b) => b.addEventListener('click', () => { color = b.dataset.swatch; paint(); }));
+  el.querySelectorAll('[data-icon]').forEach((b) => b.addEventListener('click', () => { iconName = b.dataset.icon; paint(); }));
   $('#cp-picker').addEventListener('input', (e) => { color = e.target.value.toLowerCase(); paint('picker'); });
   $('#cp-hex').addEventListener('input', (e) => {
     const v = ('#' + e.target.value.replace(/[^0-9a-f]/gi, '')).slice(0, 7).toLowerCase();
     if (/^#[0-9a-f]{6}$/.test(v)) { color = v; paint('hex'); }
   });
   $('#cp-save').addEventListener('click', () => {
-    setCategoryColor(c.id, color);
-    close(); toast(`${c.name}: color guardado`); onDone();
+    const name = $('#cp-name').value.trim();
+    if (!name) return toast('Ponle un nombre');
+    if (c) updateCategory(c.id, { name, icon: iconName, color });
+    else addCategory({ kind, name, icon: iconName, color });
+    close(); toast(c ? 'Categoría guardada' : `Categoría "${name}" creada`); onDone();
+  });
+  $('#cp-del')?.addEventListener('click', () => {
+    const msg = used ? `¿Eliminar "${c.name}"? Sus ${used} movimiento${used === 1 ? '' : 's'} pasarán a "Otros".` : `¿Eliminar "${c.name}"?`;
+    if (!confirm(msg)) return;
+    deleteCategory(c.id); close(); toast('Categoría eliminada'); onDone();
   });
   paint();
 }
@@ -399,8 +446,6 @@ function openRecurringForm(id, onDone) {
           <select id="r-payer"><option value="">Yo</option>
             ${payers().map((p) => `<option value="${esc(p.id)}" ${p.id === r?.paidBy ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
           </select></div>` : ''}
-        <div class="field"><label for="r-tags">Etiquetas</label>
-          <input id="r-tags" placeholder="#suscripciones" autocapitalize="off" value="${esc((r?.tags || []).map((t) => '#' + t).join(' '))}"></div>
         ${r ? `<div class="field"><label for="r-active">Activo</label><span class="field-note"></span>
           <input id="r-active" type="checkbox" class="switch" role="switch" ${r.active ? 'checked' : ''}></div>`
           : `<div class="field"><label for="r-done">Ya pagado</label><span class="field-note">este mes</span>
@@ -434,7 +479,7 @@ function openRecurringForm(id, onDone) {
     if (!(day >= 1 && day <= 31)) return toast('El día debe estar entre 1 y 31');
     const data = {
       name: $('#r-name').value.trim(), type, amount: round2(amount), day,
-      category: $('#r-cat').value, account: $('#r-acc')?.value ?? '', tags: normalizeTags($('#r-tags').value),
+      category: $('#r-cat').value, account: $('#r-acc')?.value ?? '', tags: r?.tags || [],
       paidBy: type === 'expense' ? ($('#r-payer')?.value ?? '') : '',
     };
     if (data.paidBy) data.account = '';
