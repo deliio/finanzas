@@ -7,7 +7,12 @@ import { mailboxConfig, newToken, testMailbox, pullMailbox, mailboxScript } from
 import { esc, icon, toast } from '../ui.js';
 
 // Enlaces de iCloud para instalar los atajos de un toque (vacío = solo instrucciones).
-const SHORTCUT_LINKS = { ingreso: '', gasto: '' };
+// Llevan dentro la URL y el código del buzón de la familia: al instalarlos hay que poner tu nombre.
+const SHORTCUT_LINKS = {
+  comercio: 'https://www.icloud.com/shortcuts/4c75040b408b4c938d173c58c46d2fc0',
+  ingreso: 'https://www.icloud.com/shortcuts/b8df8241c9ad4cacbcd5b3a730464fb2',
+  gasto: 'https://www.icloud.com/shortcuts/b807ddd64efd47fb8a4f383a91d71026',
+};
 
 /* ---------- Dibujos ------------------------------------------------------ */
 
@@ -70,7 +75,15 @@ function steps(ctx) {
     <p class="hint" style="margin:10px 4px 0">Para tenerlo a mano: mantén pulsado el atajo → <b>Share → Add to Home Screen</b>, o añádelo como widget.</p>`;
 
   const link = (key) => SHORTCUT_LINKS[key] ? `<a class="btn btn-primary" href="${esc(SHORTCUT_LINKS[key])}" target="_blank" rel="noopener">${icon('download')} Añadir el atajo de un toque</a>
-    <p class="hint" style="margin:8px 4px 16px">Al instalarlo te preguntará tu <b>URL</b>, tu <b>código</b> y tu <b>nombre</b> (cópialos arriba). Si prefieres hacerlo a mano:</p>` : '';
+    <div class="card guide-warn">
+      <b>Al instalarlo, cámbialo antes de usarlo:</b>
+      <ol class="steps" style="margin:8px 0 0">
+        <li>Abre el atajo → acción <b>Get Contents of URL</b>.</li>
+        <li>En <code>user</code> pon <b>tu nombre</b> (el mismo que en Ajustes → Buzón). Si no, tus pagos le llegarán a otra persona.</li>
+        <li><b>URL</b> y <code>token</code>: déjalos si usas el buzón de la familia. Si creaste el tuyo, pon tu URL y tu código ${url ? '<button type="button" class="link-btn" data-copy="url">Copiar URL</button> ' : ''}<button type="button" class="link-btn" data-copy="token">Copiar código</button>.</li>
+      </ol>
+    </div>
+    <p class="hint" style="margin:10px 4px 16px">Si prefieres hacerlo a mano desde cero:</p>` : '';
 
   return [
     {
@@ -200,6 +213,14 @@ function steps(ctx) {
           <div class="mk-action">When I tap: <b>todas tus tarjetas</b></div>
           <div class="mk-action">${tap('Run Immediately', 'mk-line')}</div>`)}
         <p>Se ejecuta solo cada vez que pagas con el móvil en una tienda.</p>
+        ${SHORTCUT_LINKS.comercio ? `${link('comercio').replace('Si prefieres hacerlo a mano desde cero:', 'Luego crea la automatización que lo lanza:')}
+        <ol class="steps">
+          <li>App <b>Shortcuts</b> → pestaña <b>Automation</b> → <b>+</b> → <b>Transaction</b> (Wallet).</li>
+          <li>En <b>When I tap</b> marca <b>todas</b> tus tarjetas → <b>Run Immediately</b> → <b>Next</b> → <b>New Blank Automation</b>.</li>
+          <li>Añade la acción <b>Run Shortcut</b> → elige <b>Finanzas Apple Pay</b>. Toca la flecha <b>›</b> y en <b>Input</b> elige <span class="var">Shortcut Input</span>.</li>
+          <li>Paga algo pequeño y mira que llega a la app.</li>
+        </ol>
+        <p class="hint" style="margin:14px 4px 10px">O, sin instalar nada, hazlo todo dentro de la automatización:</p>` : ''}
         <ol class="steps">
           <li>App <b>Shortcuts</b> → pestaña <b>Automation</b> → <b>+</b> → <b>Transaction</b> (Wallet).</li>
           <li>En <b>When I tap</b> marca <b>todas</b> las tarjetas con las que pagas.</li>

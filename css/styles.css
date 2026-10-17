@@ -761,3 +761,6 @@ button.left { background: none; color: var(--accent); font-size: 17px; justify-s
 .mk-action b { color: #fff; font-weight: 600; }
 .mk-action.hot { outline: 2px solid var(--green); }
 .mk-phone .mk-tap { background: rgba(50,215,75,.18); color: var(--green); outline-color: var(--green); }
+.guide-warn { border: 1px solid rgba(255, 159, 10, .45); font-size: 14px; margin-top: 6px; }
+.guide-warn > b { color: var(--orange); }
+.guide-warn code { font-family: ui-monospace, Menlo, monospace; color: var(--text); }
