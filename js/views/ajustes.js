@@ -45,6 +45,8 @@ export function render(root) {
         <button class="btn btn-primary" type="button" data-action="mailbox">Configurar buzón</button>
       </div>`}
 
+    <a class="btn" href="#/guia" style="margin-top:10px">${icon('book')} Guía paso a paso: buzón y atajos</a>
+
     <div class="section-title">Tarjetas de crédito <button class="link-btn" data-action="add-card">+ Añadir</button></div>
     ${creditCards().length ? `<div class="list">${creditCards().map((c) => `
       <button class="row" data-card="${esc(c.id)}">

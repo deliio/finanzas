@@ -10,14 +10,15 @@ import * as mapa from './views/mapa.js';
 import * as informes from './views/informes.js';
 import { readPrefillFromURL, quickSavePending } from './views/nuevo-gasto.js';
 import * as revisar from './views/revisar.js';
+import * as guia from './views/guia.js';
 import { pullMailbox } from './mailbox.js';
 import { getState, setSetting, runRecurring, runCardCharges, creditCards } from './store.js';
 import { snapshotNetWorth } from './networth.js';
 import { toast, icon } from './ui.js';
 
-const routes = { inicio: dashboard, movimientos, nuevo, patrimonio, ajustes, analisis, mapa, informes, revisar };
+const routes = { inicio: dashboard, movimientos, nuevo, patrimonio, ajustes, analisis, mapa, informes, revisar, guia };
 // Vistas sin pestaña propia: resaltan la pestaña de la que cuelgan.
-const TAB_OF = { analisis: 'informes', mapa: 'informes', ajustes: 'inicio', revisar: 'inicio' };
+const TAB_OF = { analisis: 'informes', mapa: 'informes', ajustes: 'inicio', revisar: 'inicio', guia: 'inicio' };
 const viewEl = document.getElementById('view');
 let cleanup = null;
 

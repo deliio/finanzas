@@ -693,3 +693,71 @@ body.privacy .pill-stat .value { filter: blur(16px); }
 .review-list .trail { margin-top: 2px; }
 .review-missing.small { font-size: 11px; padding: 1px 7px; }
 button.left { background: none; color: var(--accent); font-size: 17px; justify-self: start; padding: 0; }
+
+/* ---------- Guía paso a paso (buzón + atajos) ------------------------ */
+.guide-progress { height: 4px; border-radius: 2px; background: var(--card-2); margin: 0 0 18px; overflow: hidden; }
+.guide-progress span { display: block; height: 100%; background: var(--text); transition: width .25s; }
+.guide-kicker { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-2); margin: 0 4px 4px; }
+.guide-title { font-size: 26px; font-weight: 700; margin: 0 4px 16px; letter-spacing: -0.02em; }
+.guide-body { padding-bottom: 110px; }
+.guide-body > p { color: var(--text-2); font-size: 15px; margin: 0 4px 14px; }
+.guide-body > p b { color: var(--text); }
+.guide-body .steps { margin: 0 0 16px; }
+.guide-body .steps li { margin-top: 8px; }
+.guide-hero { width: 72px; height: 72px; border-radius: 50%; background: var(--card-2); display: grid; place-items: center; margin: 4px auto 18px; }
+.guide-hero svg { width: 34px; height: 34px; }
+.guide-hero.ok { background: var(--green); color: #000; }
+.guide-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; gap: 10px;
+  padding: 12px var(--gutter) calc(12px + var(--safe-bottom)); background: linear-gradient(to top, var(--bg) 70%, transparent); }
+.guide-nav .btn { margin: 0; flex: 1; }
+.guide-nav .btn:disabled { opacity: .4; }
+.guide-copy { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 14px; }
+.guide-copy + .guide-copy { margin-top: 8px; }
+.guide-copy code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--text); }
+.guide-copy .link-btn, .guide-table .link-btn, .steps .link-btn { color: var(--blue); font-size: 13px; font-weight: 600; }
+.guide-table { background: var(--card); border-radius: var(--radius-sm); overflow: hidden; font-size: 13px; }
+.guide-table > div { display: grid; grid-template-columns: 82px 1fr; gap: 10px; padding: 9px 12px; border-top: 0.5px solid var(--sep); align-items: center; }
+.guide-table > div:first-child { border-top: 0; }
+.guide-table .gt-head { color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.guide-table code { font-family: ui-monospace, Menlo, monospace; color: var(--text); }
+.guide-table span { word-break: break-all; }
+.var { display: inline-block; background: rgba(10, 132, 255, .18); color: #64b5ff; border-radius: 6px; padding: 1px 6px; font-weight: 600; word-break: normal; }
+
+/* Dibujos de pantallas */
+.mock { position: relative; border-radius: 14px; overflow: hidden; margin: 0 0 16px; font-size: 11.5px; line-height: 1.4; }
+.mk-desk { background: #fff; color: #202124; min-height: 170px; font-family: Roboto, Arial, sans-serif; box-shadow: 0 0 0 1px #2a2a2a; }
+.mk-titlebar { display: flex; align-items: center; gap: 5px; background: #f1f3f4; padding: 7px 10px; color: #5f6368; }
+.mk-titlebar i { width: 8px; height: 8px; border-radius: 50%; background: #dadce0; }
+.mk-titlebar span { margin-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-menu, .mk-toolbar { padding: 8px 10px; border-bottom: 1px solid #e8eaed; white-space: nowrap; overflow: hidden; }
+.mk-toolbar { display: flex; align-items: center; gap: 8px; }
+.mk-sp { flex: 1; }
+.mk-blue { color: #1a73e8; font-weight: 500; }
+.mk-grid { height: 70px; background-image: linear-gradient(#e8eaed 1px, transparent 1px), linear-gradient(90deg, #e8eaed 1px, transparent 1px); background-size: 48px 18px; }
+.mk-dropdown { position: absolute; top: 64px; z-index: 1; background: #fff; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.25); padding: 4px 0; min-width: 150px; }
+.mk-dropdown > * { display: block; padding: 5px 12px; }
+.mk-dropdown.inline { position: static; box-shadow: 0 1px 6px rgba(0,0,0,.2); margin-top: 6px; }
+.mk-code { margin: 0; padding: 10px 12px; font: 11px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: #188038; }
+.mk-code s { color: #c5221f; display: block; }
+.mk-code em { font-style: normal; }
+.mk-dialog { margin: 12px; padding: 12px; border-radius: 8px; box-shadow: 0 1px 8px rgba(0,0,0,.2); background: #fff; }
+.mk-dialog p { margin: 6px 0; color: #5f6368; }
+.mk-row { padding: 6px 0; color: #5f6368; }
+.mk-field { display: flex; justify-content: space-between; gap: 10px; padding: 7px 8px; border: 1px solid #dadce0; border-radius: 4px; margin-top: 7px; }
+.mk-field span { color: #5f6368; }
+.mk-field b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-field.hot { border: 2px solid #34a853; box-shadow: 0 0 0 4px rgba(52,168,83,.25); }
+.mk-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 10px; color: #1a73e8; }
+.mk-tap { display: inline-block; position: relative; border-radius: 6px; padding: 1px 6px; margin: -1px -2px; background: rgba(52,168,83,.16); color: #0b6b2b; font-weight: 600;
+  outline: 2px solid #34a853; animation: mk-pulse 1.6s ease-out infinite; }
+.mk-tap.mk-line { display: block; margin: 2px 4px; }
+.mk-tap.blue { background: #1a73e8; color: #fff; padding: 4px 12px; }
+.mk-tap.link { background: none; color: #1a73e8; }
+@keyframes mk-pulse { 0% { box-shadow: 0 0 0 0 rgba(52,168,83,.55); } 100% { box-shadow: 0 0 0 9px rgba(52,168,83,0); } }
+.mk-phone { background: #1c1c1e; color: #fff; max-width: 260px; margin: 0 auto 16px; border-radius: 30px; padding: 26px 12px 14px; box-shadow: 0 0 0 5px #2c2c2e; font-family: var(--font); font-size: 12.5px; }
+.mk-notch { position: absolute; top: 8px; left: 50%; width: 70px; height: 9px; border-radius: 6px; background: #000; transform: translateX(-50%); }
+.mk-ios-title { font-weight: 700; font-size: 16px; margin: 2px 4px 10px; }
+.mk-action { background: #2c2c2e; border-radius: 10px; padding: 8px 10px; margin-top: 6px; color: #d1d1d6; }
+.mk-action b { color: #fff; font-weight: 600; }
+.mk-action.hot { outline: 2px solid var(--green); }
+.mk-phone .mk-tap { background: rgba(50,215,75,.18); color: var(--green); outline-color: var(--green); }
