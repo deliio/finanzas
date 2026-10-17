@@ -9,6 +9,17 @@ import { pastePayment } from './nuevo-gasto.js';
 import { openTxSheet } from './movimientos.js';
 import { openTracker } from './analisis.js';
 import { openBudgetSheet } from './ajustes.js';
+import { block, applyOrder, orderButton, openOrderSheet } from '../sections.js';
+
+// Secciones que se pueden ordenar (en el orden original).
+const BLOCKS = [
+  { id: 'balance', label: 'Balance del mes' },
+  { id: 'presupuestos', label: 'Presupuestos' },
+  { id: 'medeben', label: 'Me deben' },
+  { id: 'tehanpagado', label: 'Te han pagado' },
+  { id: 'categorias', label: 'Gasto por categoría' },
+  { id: 'movimientos', label: 'Movimientos del mes' },
+];
 
 export function render(root, { navigate }) {
   const draw = () => {
@@ -58,7 +69,7 @@ export function render(root, { navigate }) {
         </a>` : '';
       })()}
 
-      <section class="card hero">
+      ${block('balance', `<section class="card hero">
         <div class="label">Balance ${isCurrentMonth(key) ? 'del mes' : `de ${esc(monthLabel(key).toLowerCase())}`}</div>
         <div class="amount num">${money(balance)}</div>
         <div class="split">
@@ -72,9 +83,9 @@ export function render(root, { navigate }) {
             ${payerRows.map((p) => `<div class="papi-sub">${icon('user')} ${esc(p.name)} <span class="num">${money(p.total)}</span></div>`).join('')}
           </div>
         </div>
-      </section>
+      </section>`)}
 
-      <div class="section-title">Presupuestos <a href="#/ajustes">Editar</a></div>
+      ${block('presupuestos', `<div class="section-title">Presupuestos <a href="#/ajustes">Editar</a></div>
       ${budgets.length ? `<div class="rings">${budgets.map((c) => {
         const spent = spentByCat[c.id] || 0;
         const pct = spent / c.budget;
@@ -83,32 +94,35 @@ export function render(root, { navigate }) {
           <div class="name">${esc(c.name)}</div>
           <div class="sub num ${pct > 1 ? 'neg' : ''}">${money(spent, { decimals: false })} / ${money(c.budget, { decimals: false })}</div>
         </button>`;
-      }).join('')}</div>` : `<a class="card empty" href="#/ajustes" style="display:block">Sin presupuestos · Toca para definirlos en Ajustes</a>`}
+      }).join('')}</div>` : `<a class="card empty" href="#/ajustes" style="display:block">Sin presupuestos · Toca para definirlos en Ajustes</a>`}`)}
 
-      ${owed > 0 ? `<div class="section-title">Me deben <a href="#/patrimonio">Ver</a></div>
+      ${block('medeben', owed > 0 ? `<div class="section-title">Me deben <a href="#/patrimonio">Ver</a></div>
       <div class="list"><a class="row" href="#/patrimonio">
         <span class="icon">${icon('inbox')}</span>
         <span class="main"><div class="title">${[...owers].slice(0, 3).map(esc).join(', ')}${owers.size > 3 ? '…' : ''}</div>
           <div class="subtitle">${debts.length} deuda${debts.length === 1 ? '' : 's'} pendiente${debts.length === 1 ? '' : 's'}</div></span>
         <span class="trail num pos">${money(owed)}</span>
-      </a></div>` : ''}
+      </a></div>` : '')}
 
-      ${payerRows.length ? `<div class="section-title">Te han pagado</div>
+      ${block('tehanpagado', payerRows.length ? `<div class="section-title">Te han pagado</div>
       <div class="list">${payerRows.map((p) => `<button class="row" data-payer-bucket="${esc(payerBucketId(p.id))}">
         <span class="icon">${icon('user')}</span>
         <span class="main"><div class="title">${esc(p.name)}</div>
           <div class="subtitle">${p.list.length} gasto${p.list.length === 1 ? '' : 's'} · no restan de tus cuentas</div></span>
         <span class="trail num">${money(p.total)}</span>
-      </button>`).join('')}</div>` : ''}
+      </button>`).join('')}</div>` : '')}
 
-      <div class="section-title">Gasto por categoría <a href="#/analisis">Análisis</a></div>
-      ${spendingDonuts(monthTx.filter((t) => t.type === 'expense'), { href: '#/analisis' })}
+      ${block('categorias', `<div class="section-title">Gasto por categoría <a href="#/analisis">Análisis</a></div>
+      ${spendingDonuts(monthTx.filter((t) => t.type === 'expense'), { href: '#/analisis' })}`)}
 
-      <div class="section-title">Movimientos del mes <a href="#/movimientos">Ver todos</a></div>
+      ${block('movimientos', `<div class="section-title">Movimientos del mes <a href="#/movimientos">Ver todos</a></div>
       ${latest.length
         ? `<div class="list">${latest.map((t) => txRow(t, categoryById(t.category))).join('')}</div>`
-        : `<div class="card empty"><strong>Sin movimientos</strong>${isCurrentMonth(key) ? 'Pulsa el botón + para añadir tu primer gasto.' : 'No hay nada apuntado en este mes.'}</div>`}
+        : `<div class="card empty"><strong>Sin movimientos</strong>${isCurrentMonth(key) ? 'Pulsa el botón + para añadir tu primer gasto.' : 'No hay nada apuntado en este mes.'}</div>`}`)}
+
+      ${orderButton()}
     `;
+    applyOrder(root, 'inicio', BLOCKS);
 
     root.querySelector('#paste-pay').addEventListener('click', () => pastePayment(navigate));
     root.querySelector('#month-select').addEventListener('change', (e) => {
@@ -118,6 +132,7 @@ export function render(root, { navigate }) {
   };
 
   root.addEventListener('click', (e) => {
+    if (e.target.closest('[data-order]')) return openOrderSheet('inicio', BLOCKS, draw);
     const payerBtn = e.target.closest('[data-payer-bucket]');
     if (payerBtn) return openTracker({ kind: 'cat', id: payerBtn.dataset.payerBucket }, draw);
     const ringCard = e.target.closest('[data-budget]');

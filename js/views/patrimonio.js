@@ -9,6 +9,22 @@ import { MIRROR_PRESETS, hasApiKey, fetchQuote, fetchEurUsd, refreshMarket, esti
 import { computeNetWorth, snapshotNetWorth } from '../networth.js';
 import { money, esc, parseAmount, toast, icon, usd, signedPct, signedEur, tone, openSheet, privacyButton, shortDate, CUR } from '../ui.js';
 import { lineChart, progress } from '../charts.js';
+import { block, applyOrder, orderButton, openOrderSheet } from '../sections.js';
+
+// Secciones que se pueden ordenar (en el orden original).
+const BLOCKS = [
+  { id: 'resumen', label: 'Patrimonio neto' },
+  { id: 'evolucion', label: 'Evolución' },
+  { id: 'inversiones', label: 'Inversiones' },
+  { id: 'huchas', label: 'Huchas' },
+  { id: 'pendiente', label: 'Pendiente de cobro' },
+  { id: 'tarjetas', label: 'Tarjetas de crédito' },
+  { id: 'medeben', label: 'Me deben' },
+  { id: 'notas', label: 'Notas' },
+  { id: 'liquidez', label: 'Liquidez' },
+  { id: 'activo', label: 'Activos' },
+  { id: 'deuda', label: 'Deudas' },
+];
 import { LOCALE, BASE } from '../i18n.js';
 
 const KINDS = {
@@ -48,7 +64,7 @@ export function render(root) {
     root.innerHTML = `
       <header class="page-header"><h1>Patrimonio</h1><div class="header-actions">${privacyButton()}</div></header>
 
-      <section class="card hero">
+      ${block('resumen', `<section class="card hero">
         <div class="label">Patrimonio neto</div>
         <div class="amount num">${money(n.net)}</div>
         ${points.length > 1 ? `<div class="hero-change num ${tone(change)}">${signedEur(change)} en ${RANGES.find((r) => r.id === range).label}</div>` : ''}
@@ -67,21 +83,21 @@ export function render(root) {
           ${n.enHuchas ? `<div><span class="muted">Disponible (sin huchas)</span><span class="num">${money(n.disponible)}</span></div>` : ''}
           ${n.pendiente ? `<div><span class="muted">Proyección con cobros pendientes</span><span class="num">${money(n.proyeccion)}</span></div>` : ''}
         </div>` : ''}
-      </section>
+      </section>`)}
 
-      <div class="section-title">Evolución
+      ${block('evolucion', `<div class="section-title">Evolución
         <div class="range-tabs">${RANGES.map((r) => `<button type="button" data-range="${r.id}" aria-pressed="${r.id === range}">${r.label}</button>`).join('')}</div>
       </div>
-      <section class="card">${lineChart(points, { color: 'auto' })}</section>
+      <section class="card">${lineChart(points, { color: 'auto' })}</section>`)}
 
-      <div class="section-title">
+      ${block('inversiones', `<div class="section-title">
         Inversiones
         ${holdings.length && hasApiKey() ? `<button class="link-btn" data-action="refresh" ${refreshing ? 'disabled' : ''}>
           ${refreshing ? 'Actualizando…' : lastFetch ? `Actualizado ${timeFmt.format(lastFetch)}` : 'Actualizar'}</button>` : ''}
       </div>
-      ${renderFunds(holdings, quotes, fx, funds)}
+      ${renderFunds(holdings, quotes, fx, funds)}`)}
 
-      <div class="section-title">Huchas <button class="link-btn" data-action="add-goal">+ Nueva</button></div>
+      ${block('huchas', `<div class="section-title">Huchas <button class="link-btn" data-action="add-goal">+ Nueva</button></div>
       ${goals.length ? `<div class="list">${goals.map((g) => {
         const p = g.target ? g.saved / g.target : 0;
         return `<button class="row goal-row" data-goal="${esc(g.id)}">
@@ -93,9 +109,9 @@ export function render(root) {
           </span>
         </button>`;
       }).join('')}</div>`
-        : `<div class="card empty" style="padding:18px">Crea una hucha para reservar liquidez para un objetivo (viaje, coche, colchón…).</div>`}
+        : `<div class="card empty" style="padding:18px">Crea una hucha para reservar liquidez para un objetivo (viaje, coche, colchón…).</div>`}`)}
 
-      <div class="section-title">Pendiente de cobro <button class="link-btn" data-action="add-pending">+ Añadir</button></div>
+      ${block('pendiente', `<div class="section-title">Pendiente de cobro <button class="link-btn" data-action="add-pending">+ Añadir</button></div>
       ${pending.length ? `<div class="list">${pending.map((p) => `
         <button class="row" data-pending="${esc(p.id)}">
           <span class="icon">${icon('clock')}</span>
@@ -103,9 +119,9 @@ export function render(root) {
             <div class="subtitle">${p.expectedDate ? `Previsto ${shortDate(p.expectedDate)}` : 'Sin fecha'}</div></span>
           <span class="trail num pos">+${money(p.amount)}</span>
         </button>`).join('')}</div>`
-        : `<div class="card empty" style="padding:18px">Becas, devoluciones de Hacienda… Se suman a la proyección, no a tu liquidez.</div>`}
+        : `<div class="card empty" style="padding:18px">Becas, devoluciones de Hacienda… Se suman a la proyección, no a tu liquidez.</div>`}`)}
 
-      ${creditCards().length ? `<div class="section-title">Tarjetas de crédito <a href="#/ajustes">Ajustes</a></div>
+      ${block('tarjetas', creditCards().length ? `<div class="section-title">Tarjetas de crédito <a href="#/ajustes">Ajustes</a></div>
       <div class="list">${creditCards().map((c) => `
         <div class="row">
           <span class="icon">${icon('card')}</span>
@@ -113,17 +129,17 @@ export function render(root) {
             <div class="subtitle">Se cobra el ${new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short' }).format(new Date(nextChargeDate(c) + 'T00:00:00'))} de ${esc(accounts.find((a) => a.id === c.chargeAccount)?.name || '—')}</div></span>
           <span class="trail num neg">−${money(cardPending(c))}</span>
         </div>`).join('')}</div>
-      <p class="hint" style="margin:8px 4px 0">Lo gastado con tarjeta cuenta como deuda hasta el día de cobro.</p>` : ''}
+      <p class="hint" style="margin:8px 4px 0">Lo gastado con tarjeta cuenta como deuda hasta el día de cobro.</p>` : '')}
 
-      <div class="section-title">Me deben <button class="link-btn" data-action="add-debt">+ Añadir</button></div>
-      ${debtsHtml()}
+      ${block('medeben', `<div class="section-title">Me deben <button class="link-btn" data-action="add-debt">+ Añadir</button></div>
+      ${debtsHtml()}`)}
 
-      <div class="section-title">Notas <button class="link-btn" data-action="add-note">+ Nota</button></div>
-      ${notesHtml()}
+      ${block('notas', `<div class="section-title">Notas <button class="link-btn" data-action="add-note">+ Nota</button></div>
+      ${notesHtml()}`)}
 
       ${Object.entries(KINDS).map(([kind, k]) => {
         const list = accounts.filter((a) => a.kind === kind);
-        return `
+        return block(kind, `
           <div class="section-title">${k.label}<span class="num muted" style="font-size:15px">${money(total(kind))}</span></div>
           ${list.length ? `<div class="list">${list.map((a) => {
             const { value, interest, flows } = accountBreakdown(a);
@@ -138,7 +154,7 @@ export function render(root) {
               <span class="trail num ${kind === 'deuda' ? 'neg' : ''}">${kind === 'deuda' ? '−' : ''}${money(value)}</span>
             </button>`;
           }).join('')}</div>`
-            : `<div class="card empty" style="padding:18px">Sin ${k.label.toLowerCase()}</div>`}`;
+            : `<div class="card empty" style="padding:18px">Sin ${k.label.toLowerCase()}</div>`}`);
       }).join('')}
 
       <details class="add-form">
@@ -157,7 +173,10 @@ export function render(root) {
           <button class="btn btn-primary" type="submit">Añadir</button>
         </form>
       </details>
+
+      ${orderButton()}
     `;
+    applyOrder(root, 'patrimonio', BLOCKS);
   };
 
   async function refresh(force = false) {
@@ -171,6 +190,7 @@ export function render(root) {
   }
 
   root.addEventListener('click', (e) => {
+    if (e.target.closest('[data-order]')) return openOrderSheet('patrimonio', BLOCKS, draw);
     const rangeBtn = e.target.closest('[data-range]');
     if (rangeBtn) { range = rangeBtn.dataset.range; draw(); return; }
 

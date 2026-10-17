@@ -585,6 +585,18 @@ export const EN = {
   'Sacado de la hucha': 'Taken out of the pot',
   'Revisión activada': 'Review on',
   'Revisión desactivada': 'Review off',
+  // Ordenar secciones
+  '⇅ Ordenar secciones': '⇅ Reorder sections',
+  'Ordenar secciones': 'Reorder sections',
+  'Sube o baja cada sección. Las que están vacías no se ven, pero guardan su sitio.': 'Move each section up or down. Empty ones are hidden but keep their place.',
+  'Orden original': 'Original order',
+  'Subir': 'Move up',
+  'Bajar': 'Move down',
+  'Sin presupuestos': 'No budgets',
+  'Toca para definirlos en Ajustes': 'Tap to set them in Settings',
+  'Sin movimientos': 'No transactions',
+  'Pulsa el botón + para añadir tu primer gasto.': 'Tap the + button to add your first expense.',
+  'No hay nada apuntado en este mes.': 'Nothing recorded this month.',
   // Segunda pasada
   'Te han pagado': 'Paid for you',
   'no restan de tus cuentas': 'not taken from your accounts',
