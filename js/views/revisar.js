@@ -1,15 +1,32 @@
-// Revisar movimientos: bandeja de los que entraron solos (Atajos, URL, recurrentes)
-// con la revisión activada. Se revisan de uno en uno: categoría, importe y concepto
-// editables, y "Confirmar" o "Eliminar". Al terminar: "¡Todo al día!" y vuelta a Inicio.
+// Revisar movimientos: bandeja de los que entraron solos (buzón, Atajos, recurrentes).
+// Primero se ven en LISTA con la hora a la que llegaron; al tocar uno se edita
+// (categoría, importe, concepto, fecha) y se Confirma o Elimina, y se vuelve a la lista.
+// Cuando no queda ninguno: "¡Todo al día!" y vuelta a Inicio.
 
-import { getState, pendingReview, updateTransaction, deleteTransaction, categoriesOf, payerById, todayISO, round2 } from '../store.js';
-import { esc, icon, money, parseAmount, amountToInput, toast, currencySymbol } from '../ui.js';
+import { pendingReview, updateTransaction, deleteTransaction, categoriesOf, categoryById, payerById, todayISO, round2 } from '../store.js';
+import { esc, icon, money, signedMoney, parseAmount, amountToInput, toast, currencySymbol } from '../ui.js';
 
-const SOURCE = { atajo: 'Apple Pay · Atajo', url: 'Atajo (enlace)', recurrente: 'Pago recurrente', buzon: 'Buzón automático' };
+const SOURCE = { atajo: 'Apple Pay', url: 'Atajo', recurrente: 'Recurrente', buzon: 'Buzón' };
+
+const timeFmt = new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' });
+const dayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+
+/** Cuándo llegó: "Hoy · 14:32", "Ayer · 21:10" o "lun 13 oct · 09:15". */
+function arrived(t) {
+  const d = new Date(t.receivedAt || t.createdAt);
+  if (Number.isNaN(d.getTime())) return '';
+  const today = todayISO();
+  const day = todayISO(d);
+  const yesterday = todayISO(new Date(Date.now() - 86400000));
+  const label = day === today ? 'Hoy' : day === yesterday ? 'Ayer' : dayFmt.format(d).replace('.', '');
+  return `${label} · ${timeFmt.format(d)}`;
+}
+
+const hasCategory = (t) => categoriesOf(t.type).some((c) => c.id === t.category);
+const byArrival = (a, b) => (b.receivedAt || b.createdAt).localeCompare(a.receivedAt || a.createdAt);
 
 export function render(root, { navigate }) {
   document.body.classList.add('is-modal');
-  let total = pendingReview().length; // para el "1 de N"
   let done = 0;
   let timer = null;
 
@@ -24,22 +41,63 @@ export function render(root, { navigate }) {
     timer = setTimeout(() => navigate('inicio'), 1800);
   };
 
-  const draw = () => {
-    const t = pendingReview()[0];
-    if (!t) return finish();
-    total = Math.max(total, done + pendingReview().length);
-    const cats = categoriesOf(t.type);
-    let category = cats.some((c) => c.id === t.category) ? t.category : '';
+  /* ---------- Lista ---------- */
+  const showList = () => {
+    const list = [...pendingReview()].sort(byArrival);
+    if (!list.length) return finish();
+    const ready = list.filter(hasCategory);
 
     root.innerHTML = `
       <div class="topbar">
         <a class="left" href="#/inicio">Cerrar</a>
-        <h2>Revisar</h2>
-        <span class="muted review-step">${done + 1} de ${total}</span>
+        <h2>Por revisar</h2>
+        <span class="muted review-step">${list.length}</span>
       </div>
-      <div class="progress review-progress"><span style="width:${(done / total) * 100}%;background:var(--text)"></span></div>
+      <p class="hint" style="margin:-6px 4px 14px">Toca un movimiento para revisarlo. La hora es cuando llegó el pago.</p>
+
+      <div class="list review-list">${list.map((t) => {
+        const cat = hasCategory(t) ? categoryById(t.category) : null;
+        return `<button class="row" data-review="${esc(t.id)}">
+          <span class="icon">${icon(cat?.icon || 'box')}</span>
+          <span class="main">
+            <div class="title">${esc(t.description || (t.type === 'income' ? 'Ingreso' : 'Gasto'))}</div>
+            <div class="subtitle">${esc(arrived(t))} · ${esc(SOURCE[t.source] || 'Auto')}${t.location ? ` · ${icon('pin')}` : ''}</div>
+            <div class="subtitle">${cat ? esc(cat.name) : '<span class="review-missing small">Sin categoría</span>'}${t.paidBy ? ` · lo paga ${esc(payerById(t.paidBy).name)}` : ''}</div>
+          </span>
+          <span class="trail num ${t.type === 'income' ? 'pos' : 'neg'}">${signedMoney(t.amount, t.type)}</span>
+        </button>`;
+      }).join('')}</div>
+
+      ${ready.length ? `<div class="save-bar">
+        <button type="button" class="btn btn-primary" id="rv-all">${icon('check')} Confirmar ${ready.length === list.length ? (ready.length === 1 ? '' : 'todos') : ready.length === 1 ? 'el que tiene categoría' : `los ${ready.length} con categoría`}</button>
+      </div>` : ''}
+    `;
+
+    root.querySelectorAll('[data-review]').forEach((b) => b.addEventListener('click', () => showEditor(b.dataset.review)));
+    root.querySelector('#rv-all')?.addEventListener('click', () => {
+      ready.forEach((t) => updateTransaction(t.id, { revisado: true }));
+      done += ready.length;
+      toast(`${ready.length} confirmado${ready.length === 1 ? '' : 's'}`);
+      showList();
+    });
+  };
+
+  /* ---------- Edición de uno ---------- */
+  const showEditor = (id) => {
+    const t = pendingReview().find((x) => x.id === id);
+    if (!t) return showList();
+    const cats = categoriesOf(t.type);
+    let category = hasCategory(t) ? t.category : '';
+
+    root.innerHTML = `
+      <div class="topbar">
+        <button type="button" class="left" id="rv-back">‹ Lista</button>
+        <h2>Revisar</h2>
+        <span></span>
+      </div>
 
       <div class="review-meta">
+        <span class="chip">${esc(arrived(t))}</span>
         <span class="chip">${esc(SOURCE[t.source] || 'Automático')}</span>
         <span class="chip">${t.type === 'income' ? 'Ingreso' : 'Gasto'}</span>
         ${t.paidBy ? `<span class="chip">Lo paga ${esc(payerById(t.paidBy).name)}</span>` : ''}
@@ -70,13 +128,13 @@ export function render(root, { navigate }) {
         <button type="button" class="btn btn-primary" id="rv-ok">${icon('check')} Confirmar</button>
       </div>
     `;
+    window.scrollTo(0, 0);
 
     const $ = (s) => root.querySelector(s);
     const amountEl = $('#rv-amount');
-    const refresh = () => {
-      const ok = parseAmount(amountEl.value) > 0 && category;
-      $('#rv-ok').disabled = !ok;
-    };
+    const refresh = () => { $('#rv-ok').disabled = !(parseAmount(amountEl.value) > 0 && category); };
+
+    $('#rv-back').addEventListener('click', showList);
 
     root.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => {
       category = b.dataset.cat;
@@ -103,7 +161,7 @@ export function render(root, { navigate }) {
       });
       done++;
       toast('Confirmado');
-      draw();
+      showList();
     });
 
     $('#rv-del').addEventListener('click', () => {
@@ -111,13 +169,13 @@ export function render(root, { navigate }) {
       deleteTransaction(t.id);
       done++;
       toast('Eliminado');
-      draw();
+      showList();
     });
 
     refresh();
   };
 
-  draw();
+  showList();
 
   return () => {
     clearTimeout(timer);

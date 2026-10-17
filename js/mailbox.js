@@ -98,7 +98,7 @@ export async function pullMailbox() {
         account: liquid.includes(last) ? last : '',
         currency, originalAmount: Math.abs(original), fxRate: rate,
         location: validLocation({ lat: coord(it.lat), lon: coord(it.lon) }),
-        needsReview: true, forceReview: true, source: 'buzon',
+        needsReview: true, forceReview: true, source: 'buzon', receivedAt: it.at,
       }, { silent: true });
       added++;
     }

@@ -153,6 +153,7 @@ export function addTransaction(tx, { silent = false } = {}) {
     createdAt: new Date().toISOString(),
   };
   if (tx.source) record.source = tx.source; // 'atajo' | 'url' | 'recurrente' | 'buzon'
+  if (tx.receivedAt && !Number.isNaN(Date.parse(tx.receivedAt))) record.receivedAt = new Date(tx.receivedAt).toISOString(); // cuándo se pagó/envió
   // Campos opcionales: solo se guardan si aplican.
   if (tx.split > 1) record.split = Math.round(tx.split); // nº de personas
   if (tx.currency && tx.currency !== 'EUR') {

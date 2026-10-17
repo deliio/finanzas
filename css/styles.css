@@ -685,3 +685,11 @@ body.privacy .pill-stat .value { filter: blur(16px); }
 .icon-pick .ico { width: 18px; height: 18px; }
 .icon-pick.selected { background: var(--text); color: #000; }
 .color-trail .ico { width: 16px; height: 16px; color: var(--text-3); }
+
+/* ---------- v23: revisar en lista -------------------------------------- */
+.review-list .row { align-items: flex-start; }
+.review-list .row .icon { margin-top: 2px; }
+.review-list .subtitle .ico { width: 12px; height: 12px; vertical-align: -1px; }
+.review-list .trail { margin-top: 2px; }
+.review-missing.small { font-size: 11px; padding: 1px 7px; }
+button.left { background: none; color: var(--accent); font-size: 17px; justify-self: start; padding: 0; }
