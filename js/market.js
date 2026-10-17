@@ -10,9 +10,10 @@
 //      recalibra la referencia y elimina el error acumulado (tracking error, comisiones…).
 
 import { getState, setMarketData } from './store.js';
+import { BASE } from './i18n.js';
 
 const FINNHUB_QUOTE = 'https://finnhub.io/api/v1/quote';
-const FX_URL = 'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=USD'; // BCE, gratis, sin clave
+const FX_URL = `https://api.frankfurter.dev/v1/latest?base=${BASE}&symbols=USD`; // BCE, gratis, sin clave
 const QUOTE_TTL = 60 * 1000;          // no repetir consulta del mismo ticker en < 1 min
 const FX_TTL = 6 * 60 * 60 * 1000;    // el BCE publica una vez al día
 
@@ -42,8 +43,9 @@ export async function fetchQuote(ticker, key = getState().settings.finnhubKey) {
   return { price: q.c, prevClose: q.pc, changePct: q.dp, time: q.t * 1000, fetchedAt: Date.now() };
 }
 
-/** Dólares por 1 €. */
+/** Dólares por 1 unidad de la moneda principal. */
 export async function fetchEurUsd() {
+  if (BASE === 'USD') return { rate: 1, date: new Date().toISOString().slice(0, 10), fetchedAt: Date.now() };
   const res = await fetch(FX_URL);
   if (!res.ok) throw new Error('No se pudo obtener el tipo EUR/USD.');
   const data = await res.json();
@@ -52,24 +54,24 @@ export async function fetchEurUsd() {
 
 /**
  * Tipo de cambio para gastos en otra divisa (multidivisa).
- * Devuelve cuántos € vale 1 unidad de `from` en la fecha indicada (o la última publicada).
+ * Devuelve cuánto vale 1 unidad de `from` en la moneda principal, en la fecha indicada (o la última publicada).
  */
 const rateCache = new Map();
 export async function fetchRateToEur(from, date) {
-  if (from === 'EUR') return { rate: 1, date };
+  if (from === BASE) return { rate: 1, date };
   const today = new Date().toISOString().slice(0, 10);
   const when = !date || date >= today ? 'latest' : date;
   const key = `${from}:${when}`;
   if (rateCache.has(key)) return rateCache.get(key);
   let res;
   try {
-    res = await fetch(`https://api.frankfurter.dev/v1/${when}?base=${from}&symbols=EUR`);
+    res = await fetch(`https://api.frankfurter.dev/v1/${when}?base=${from}&symbols=${BASE}`);
   } catch {
     throw new Error('Sin conexión para consultar el tipo de cambio.');
   }
   if (!res.ok) throw new Error('No se pudo obtener el tipo de cambio.');
   const data = await res.json();
-  const out = { rate: data.rates.EUR, date: data.date };
+  const out = { rate: data.rates[BASE], date: data.date };
   rateCache.set(key, out);
   return out;
 }

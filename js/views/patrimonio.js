@@ -7,8 +7,9 @@ import { getState, addAccount, updateAccount, deleteAccount, accountValue, accou
   creditCards, cardPending, nextChargeDate } from '../store.js';
 import { MIRROR_PRESETS, hasApiKey, fetchQuote, fetchEurUsd, refreshMarket, estimateHolding } from '../market.js';
 import { computeNetWorth, snapshotNetWorth } from '../networth.js';
-import { money, esc, parseAmount, toast, icon, usd, signedPct, signedEur, tone, openSheet, privacyButton, shortDate } from '../ui.js';
+import { money, esc, parseAmount, toast, icon, usd, signedPct, signedEur, tone, openSheet, privacyButton, shortDate, CUR } from '../ui.js';
 import { lineChart, progress } from '../charts.js';
+import { LOCALE, BASE } from '../i18n.js';
 
 const KINDS = {
   liquidez: { label: 'Liquidez', icon: 'wallet',   color: 'var(--text)' },
@@ -24,7 +25,7 @@ const RANGES = [
 ];
 let range = '3m';
 
-const timeFmt = new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' });
+const timeFmt = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit' });
 
 export function render(root) {
   let refreshing = false;
@@ -109,7 +110,7 @@ export function render(root) {
         <div class="row">
           <span class="icon">${icon('card')}</span>
           <span class="main"><div class="title">${esc(c.name)}</div>
-            <div class="subtitle">Se cobra el ${new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' }).format(new Date(nextChargeDate(c) + 'T00:00:00'))} de ${esc(accounts.find((a) => a.id === c.chargeAccount)?.name || '—')}</div></span>
+            <div class="subtitle">Se cobra el ${new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short' }).format(new Date(nextChargeDate(c) + 'T00:00:00'))} de ${esc(accounts.find((a) => a.id === c.chargeAccount)?.name || '—')}</div></span>
           <span class="trail num neg">−${money(cardPending(c))}</span>
         </div>`).join('')}</div>
       <p class="hint" style="margin:8px 4px 0">Lo gastado con tarjeta cuenta como deuda hasta el día de cobro.</p>` : ''}
@@ -149,7 +150,7 @@ export function render(root) {
             <div class="field"><label for="acc-name">Nombre</label>
               <input id="acc-name" required placeholder="Cuenta nómina, hipoteca…"></div>
             <div class="field"><label for="acc-bal">Saldo</label>
-              <input id="acc-bal" inputmode="decimal" required placeholder="0,00 €"></div>
+              <input id="acc-bal" inputmode="decimal" required placeholder="${money(0)}"></div>
             <div class="field"><label for="acc-rate">Interés</label>
               <input id="acc-rate" inputmode="decimal" placeholder="% anual (opcional)"></div>
           </div>
@@ -325,7 +326,7 @@ function renderFunds(holdings, quotes, fx, funds) {
         <div class="pill-stat">
           <div class="label">Hoy</div>
           <div class="value num ${tone(funds.dayChange)}">${signedEur(funds.dayChange)}</div>
-          <div class="muted" style="font-size:13px">${fx ? `EUR/USD ${fx.rate.toFixed(4)}` : '&nbsp;'}</div>
+          <div class="muted" style="font-size:13px">${fx ? `${BASE}/USD ${fx.rate.toFixed(4)}` : '&nbsp;'}</div>
         </div>
       </div>
     </section>
@@ -384,7 +385,7 @@ function openAddFund(onDone) {
       </div>
       <div class="field-group">
         <div class="field"><label for="f-invested">Aportado</label>
-          <input id="f-invested" inputmode="decimal" required placeholder="0,00 €"></div>
+          <input id="f-invested" inputmode="decimal" required placeholder="${money(0)}"></div>
         <div class="field"><label for="f-value">Valor hoy</label>
           <input id="f-value" inputmode="decimal" placeholder="= aportado"></div>
       </div>
@@ -434,7 +435,7 @@ function openFund(id, onDone) {
   const { quotes = {}, fx } = getState();
   const q = quotes[h.ticker];
   const e = estimateHolding(h, q, fx);
-  const refDate = new Date(h.refDate).toLocaleDateString('es-ES');
+  const refDate = new Date(h.refDate).toLocaleDateString(LOCALE);
 
   const { el, close } = openSheet(`
     <h3 class="sheet-title">${esc(h.name)}</h3>
@@ -448,11 +449,11 @@ function openFund(id, onDone) {
     </div>
 
     <form id="recal-form" class="inline-form">
-      <input id="r-value" inputmode="decimal" placeholder="Valor real hoy (€)" required>
+      <input id="r-value" inputmode="decimal" placeholder="Valor real hoy (${CUR})" required>
       <button class="btn" type="submit">Recalibrar</button>
     </form>
     <form id="contrib-form" class="inline-form">
-      <input id="c-amount" inputmode="decimal" placeholder="Nueva aportación (€)" required>
+      <input id="c-amount" inputmode="decimal" placeholder="Nueva aportación (${CUR})" required>
       <button class="btn" type="submit">Aportar</button>
     </form>
 
@@ -510,7 +511,7 @@ function openGoalForm(goal, onDone) {
         <div class="field"><label for="g-name">Nombre</label>
           <input id="g-name" required placeholder="Viaje a Japón" value="${esc(goal?.name ?? '')}"></div>
         <div class="field"><label for="g-target">Objetivo</label>
-          <input id="g-target" inputmode="decimal" required placeholder="0,00 €" value="${goal ? esc(String(goal.target).replace('.', ',')) : ''}"></div>
+          <input id="g-target" inputmode="decimal" required placeholder="${money(0)}" value="${goal ? esc(String(goal.target).replace('.', ',')) : ''}"></div>
       </div>
       <button class="btn btn-primary" type="submit">Guardar</button>
       <button class="btn" type="button" data-close>Cancelar</button>
@@ -542,7 +543,7 @@ function openGoal(id, onDone) {
     <p class="hint" style="margin:6px 0 4px">El dinero sigue en tus cuentas, pero se aparta de tu liquidez disponible
       (<span class="num">${money(n.disponible)}</span> ahora).</p>
     <form id="move-form" class="inline-form">
-      <input id="m-amount" inputmode="decimal" placeholder="Importe (€)" required>
+      <input id="m-amount" inputmode="decimal" placeholder="Importe (${CUR})" required>
       <button class="btn" type="submit" data-dir="1">Apartar</button>
       <button class="btn" type="submit" data-dir="-1">Sacar</button>
     </form>
@@ -579,7 +580,7 @@ function openPendingForm(onDone) {
         <div class="field"><label for="p-name">Concepto</label>
           <input id="p-name" required placeholder="Beca, devolución IRPF…"></div>
         <div class="field"><label for="p-amount">Importe</label>
-          <input id="p-amount" inputmode="decimal" required placeholder="0,00 €"></div>
+          <input id="p-amount" inputmode="decimal" required placeholder="${money(0)}"></div>
         <div class="field"><label for="p-date">Fecha prevista</label>
           <input id="p-date" type="date"></div>
       </div>
@@ -632,7 +633,7 @@ function openPending(id, onDone) {
 
 /* ---------- Me deben -------------------------------------------------- */
 
-const dateFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
+const dateFmt = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short' });
 const shortAt = (iso) => dateFmt.format(new Date(iso));
 let showSettled = false;
 
@@ -678,7 +679,7 @@ function openDebtForm(onDone) {
           <input id="d-person" required list="d-people" placeholder="Nombre" autocomplete="off">
           <datalist id="d-people">${knownDebtors().map((n) => `<option value="${esc(n)}">`).join('')}</datalist></div>
         <div class="field"><label for="d-amount">Importe</label>
-          <input id="d-amount" inputmode="decimal" required placeholder="0,00 €"></div>
+          <input id="d-amount" inputmode="decimal" required placeholder="${money(0)}"></div>
         <div class="field"><label for="d-concept">Concepto</label>
           <input id="d-concept" placeholder="Cena, entradas, préstamo…"></div>
         <div class="field"><label for="d-acc">Salió de</label>

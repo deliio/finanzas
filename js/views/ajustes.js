@@ -10,7 +10,9 @@ import { ICONS } from '../icons.js';
 import { fetchQuote, estimateHolding } from '../market.js';
 import { mailboxConfig, mailboxReady, newToken, testMailbox, pullMailbox, mailboxScript } from '../mailbox.js';
 import { stateToCSV, csvToState, powerBIFiles } from '../csv.js';
-import { toast, esc, usd, money, icon, openSheet, parseAmount, amountToInput } from '../ui.js';
+import { toast, esc, usd, money, icon, openSheet, parseAmount, amountToInput, CUR } from '../ui.js';
+import { LOCALE, LANG, LANGUAGES, BASE, CURRENCIES, currencyName } from '../i18n.js';
+import { currencySymbol } from '../ui.js';
 
 let catKind = 'expense'; // pestaña del gestor de categorías
 
@@ -21,7 +23,16 @@ export function render(root) {
     <div class="topbar" style="margin-bottom:0"><a class="left" href="#/inicio">‹ Inicio</a><span></span><span></span></div>
     <header class="page-header" style="margin-top:0"><h1>Ajustes</h1></header>
 
-    <div class="section-title" style="margin-top:8px">Revisión</div>
+    <div class="section-title" style="margin-top:8px">Idioma y moneda</div>
+    <div class="field-group" style="margin-bottom:0">
+      <div class="field"><label for="set-lang">Idioma</label>
+        <select id="set-lang" data-no-i18n>${LANGUAGES.map(([v, n]) => `<option value="${v}" ${v === LANG ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label for="set-cur">Moneda</label>
+        <select id="set-cur">${CURRENCIES.map((c) => `<option value="${c}" ${c === BASE ? 'selected' : ''}>${currencySymbol(c)} · ${esc(currencyName(c))}</option>`).join('')}</select></div>
+    </div>
+    <p class="hint" style="margin:8px 4px 0">La moneda en la que apuntas y ves todo. Los gastos en otras monedas se convierten a esta.</p>
+
+    <div class="section-title">Revisión</div>
     <div class="field-group" style="margin-bottom:0">
       <div class="field"><label for="rev-toggle" class="wide">Revisión manual diaria</label>
         <span class="field-note">${((n) => (settings.reviewEnabled && n ? `${n} pendiente${n === 1 ? '' : 's'}` : ''))(pendingReview().length)}</span>
@@ -171,6 +182,19 @@ export function render(root) {
     if (p) openPayerSheet(p.dataset.payer, () => render(root));
   };
 
+  root.querySelector('#set-lang').addEventListener('change', (e) => {
+    setSetting('language', e.target.value);
+    location.reload(); // los textos y formatos se aplican al arrancar
+  });
+  root.querySelector('#set-cur').addEventListener('change', (e) => {
+    const has = getState().transactions.length || getState().accounts.length;
+    if (has && !confirm('Los importes que ya tienes no se convierten: solo cambia la moneda en la que se muestran y apuntas. Si tienes inversiones, actualiza luego su valor real. ¿Cambiar?')) {
+      e.target.value = BASE;
+      return;
+    }
+    setSetting('currency', e.target.value);
+    location.reload();
+  });
   root.querySelector('#rev-toggle').addEventListener('change', (e) => {
     const on = e.target.checked;
     setSetting('reviewEnabled', on);
@@ -240,7 +264,7 @@ export function openBudgetSheet(categoryId, onDone) {
       <div class="amount-input" style="margin-bottom:18px">
         <input id="b-amount" class="num" inputmode="decimal" autocomplete="off" placeholder="0"
                value="${c.budget > 0 ? esc(amountToInput(c.budget).replace(',00', '')) : ''}" aria-label="Presupuesto">
-        <span class="currency">€</span>
+        <span class="currency">${CUR}</span>
       </div>
       <button class="btn btn-primary" type="submit">Guardar</button>
       ${c.budget > 0 ? '<button class="btn" type="button" id="b-clear">Quitar presupuesto</button>' : ''}
@@ -403,7 +427,7 @@ function openCategorySheet(categoryId, kind, onDone) {
 
 /* ---------- Tarjetas de crédito ---------------------------------------- */
 
-const dateFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'long' });
+const dateFmt = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'long' });
 const niceDate = (iso) => dateFmt.format(new Date(iso + 'T00:00:00'));
 
 function openCardSheet(id, onDone) {
@@ -499,7 +523,7 @@ function openRecurringForm(id, onDone) {
         <div class="field"><label for="r-name">Concepto</label>
           <input id="r-name" required placeholder="Gimnasio, Netflix…" value="${esc(r?.name ?? '')}"></div>
         <div class="field"><label for="r-amount">Importe</label>
-          <input id="r-amount" inputmode="decimal" required placeholder="0,00 €" value="${r ? esc(amountToInput(r.amount)) : ''}"></div>
+          <input id="r-amount" inputmode="decimal" required placeholder="${money(0)}" value="${r ? esc(amountToInput(r.amount)) : ''}"></div>
         <div class="field"><label for="r-day">Día de cobro</label>
           <input id="r-day" type="number" inputmode="numeric" min="1" max="31" required placeholder="1-31" value="${r?.day ?? ''}"></div>
         <div class="field"><label for="r-cat">Categoría</label><select id="r-cat"></select></div>

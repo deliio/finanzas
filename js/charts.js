@@ -3,6 +3,7 @@
 
 import { money, esc } from './ui.js';
 import { getState, categoryById, payerById } from './store.js';
+import { LOCALE } from './i18n.js';
 
 // Paleta: blanco + acentos iOS. El orden se mantiene estable entre gráficas.
 export const PALETTE = ['#ffffff', '#32d74b', '#0a84ff', '#ff9f0a', '#bf5af2', '#ff375f', '#64d2ff', '#ffd60a', '#8e8e93', '#5e5ce6'];
@@ -148,5 +149,5 @@ export function progress(pct, { color = 'var(--text)' } = {}) {
   return `<div class="progress"><span style="width:${(p * 100).toFixed(1)}%;background:${color}"></span></div>`;
 }
 
-const dayFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
+const dayFmt = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short' });
 const shortDay = (iso) => dayFmt.format(new Date(iso + 'T00:00:00'));

@@ -2,10 +2,11 @@
 
 import { icon } from './icons.js';
 import { payerById } from './store.js';
+import { LOCALE, BASE } from './i18n.js';
 export { icon };
 
-const moneyFmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
-const moneyFmt0 = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+const moneyFmt = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: BASE });
+const moneyFmt0 = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: BASE, maximumFractionDigits: 0 });
 
 export const money = (n, { decimals = true } = {}) => (decimals ? moneyFmt : moneyFmt0).format(n || 0);
 
@@ -38,13 +39,16 @@ export function parseAmount(input) {
   return Number.isFinite(n) ? n : NaN;
 }
 
-/** Formatea un número para un input de importe en formato español (coma decimal). */
-export const amountToInput = (n) => (Number.isFinite(n) ? n.toFixed(2).replace('.', ',') : '');
+/** Separador decimal del idioma ("," en español, "." en inglés). */
+export const DECIMAL = LOCALE.startsWith('es') ? ',' : '.';
 
-const dayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-const shortFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' });
+/** Formatea un número para un input de importe (coma decimal en español). */
+export const amountToInput = (n) => (Number.isFinite(n) ? n.toFixed(2).replace('.', DECIMAL) : '');
+
+const dayFmt = new Intl.DateTimeFormat(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
+const shortFmt = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short' });
 export const monthName = (d) => {
-  const s = new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(d);
+  const s = new Intl.DateTimeFormat(LOCALE, { month: 'long', year: 'numeric' }).format(d);
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
@@ -58,10 +62,10 @@ export function dayLabel(iso) {
 }
 export const shortDate = (iso) => shortFmt.format(new Date(iso + 'T00:00:00'));
 
-const usdFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const usdFmt = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const usd = (n) => `${usdFmt.format(n || 0)} $`;
 
-const pctFmt = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' });
+const pctFmt = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: 'always' });
 export const signedPct = (n) => `${pctFmt.format(n || 0)} %`;
 export const signedEur = (n) => (n >= 0 ? '+' : '−') + money(Math.abs(n));
 export const tone = (n) => (n > 0.004 ? 'pos' : n < -0.004 ? 'neg' : 'muted');
@@ -112,8 +116,16 @@ export function ring(pct) {
 /** Nº de personas de un gasto compartido (los antiguos guardaban `true` = 2). */
 export const splitCount = (tx) => (tx.split === true ? 2 : Number(tx.split) || 1);
 
-const CURRENCY_SYMBOL = { EUR: '€', GBP: '£', USD: '$' };
-export const currencySymbol = (c) => CURRENCY_SYMBOL[c] ?? c;
+const CURRENCY_SYMBOL = { EUR: '€', GBP: '£', USD: '$', JPY: '¥', BRL: 'R$', CHF: 'CHF' };
+export const currencySymbol = (c) => {
+  if (CURRENCY_SYMBOL[c]) return CURRENCY_SYMBOL[c];
+  try {
+    return new Intl.NumberFormat(LOCALE, { style: 'currency', currency: c, currencyDisplay: 'narrowSymbol' })
+      .formatToParts(0).find((p) => p.type === 'currency')?.value || c;
+  } catch { return c; }
+};
+/** Símbolo de la moneda principal. */
+export const CUR = currencySymbol(BASE);
 
 export function txRow(tx, cat) {
   const extras = [];
@@ -173,4 +185,4 @@ export function monthLabel(key) {
 
 /** Etiqueta corta de un mes 'YYYY-MM' → "oct". */
 export const monthShort = (key) =>
-  new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(new Date(key + '-01T00:00:00')).replace('.', '');
+  new Intl.DateTimeFormat(LOCALE, { month: 'short' }).format(new Date(key + '-01T00:00:00')).replace('.', '');

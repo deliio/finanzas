@@ -9,6 +9,7 @@
 // 2) Power BI — varios CSV "tidy" (modelo en estrella): hechos de transacciones + dimensiones.
 
 import { accountValue, categoryById, payerById, debtPaid, debtRemaining } from './store.js';
+import { BASE } from './i18n.js';
 
 const BOM = '﻿'; // para que Excel/Power BI detecten UTF-8 (acentos, €)
 const COLUMNS = ['registro', 'id', 'fecha', 'tipo', 'importe', 'descripcion', 'categoria', 'datos'];
@@ -108,7 +109,7 @@ export function powerBIFiles(state, { estimateHolding } = {}) {
       t.type === 'income' ? 'ingreso' : 'gasto', num(t.amount), num(t.type === 'income' ? t.amount : -t.amount),
       t.category, categoryById(t.category).name, t.description,
       t.account || '', accountName[t.account] ?? '', (t.tags || []).join('|'), (t.tags || []).length,
-      t.split === true ? 2 : (t.split || 1), t.paidBy ? payerById(t.paidBy).name : '', t.currency || 'EUR', num(t.originalAmount ?? t.amount), t.fxRate ?? 1,
+      t.split === true ? 2 : (t.split || 1), t.paidBy ? payerById(t.paidBy).name : '', t.currency || BASE, num(t.originalAmount ?? t.amount), t.fxRate ?? 1,
       t.recurringId ? 1 : 0, t.location?.lat ?? '', t.location?.lon ?? '', t.revisado === false ? 0 : 1, t.createdAt,
     ]);
   }

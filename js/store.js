@@ -3,6 +3,7 @@
 // más adelante solo afecta a load()/persist().
 
 import { ICONS } from './icons.js';
+import { BASE } from './i18n.js';
 
 const STORAGE_KEY = 'finanzas:v1';
 
@@ -159,7 +160,7 @@ export function addTransaction(tx, { silent = false } = {}) {
   if (tx.receivedAt && !Number.isNaN(Date.parse(tx.receivedAt))) record.receivedAt = new Date(tx.receivedAt).toISOString(); // cuándo se pagó/envió
   // Campos opcionales: solo se guardan si aplican.
   if (tx.split > 1) record.split = Math.round(tx.split); // nº de personas
-  if (tx.currency && tx.currency !== 'EUR') {
+  if (tx.currency && tx.currency !== BASE) {
     Object.assign(record, { currency: tx.currency, originalAmount: round2(tx.originalAmount), fxRate: tx.fxRate });
   }
   if (tx.recurringId) record.recurringId = tx.recurringId;

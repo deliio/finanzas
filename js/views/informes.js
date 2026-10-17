@@ -4,10 +4,13 @@
 import { getState, availableMonths, transactionsSorted, categoryById, todayISO } from '../store.js';
 import { money, esc, icon, privacyButton, monthSelect, getSelectedMonth, setSelectedMonth, openSheet, txRow } from '../ui.js';
 import { openTxSheet } from './movimientos.js';
+import { LOCALE } from '../i18n.js';
 
-const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-const longDay = new Intl.DateTimeFormat('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-const shortDay = new Intl.DateTimeFormat('es-ES', { weekday: 'short', day: 'numeric' });
+// Iniciales de lunes a domingo en el idioma de la app (L M X J V S D / M T W T F S S).
+const WEEKDAYS = LOCALE.startsWith('es') ? ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+  : [...Array(7)].map((_, i) => new Intl.DateTimeFormat(LOCALE, { weekday: 'narrow' }).format(new Date(2024, 0, 1 + i)));
+const longDay = new Intl.DateTimeFormat(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
+const shortDay = new Intl.DateTimeFormat(LOCALE, { weekday: 'short', day: 'numeric' });
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Importe corto para que quepa en la celda: 45 · 312 · 1,2k */
@@ -78,7 +81,7 @@ export function render(root) {
       <div class="list">
         <a class="row" href="#/analisis">
           <span class="icon">${icon('pie')}</span>
-          <span class="main"><div class="title">Análisis</div><div class="subtitle">Categorías, etiquetas y estilo de vida</div></span>
+          <span class="main"><div class="title">Análisis</div><div class="subtitle">Por categoría, por persona y por mes</div></span>
           <span class="trail muted">${icon('chevron')}</span>
         </a>
         <a class="row" href="#/mapa">

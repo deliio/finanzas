@@ -5,12 +5,13 @@
 
 import { getState, pendingReview, updateTransaction, deleteTransaction, categoriesOf, categoryById, payerById, todayISO, round2, rememberWalletCard } from '../store.js';
 import { accountOptionsHtml } from './nuevo-gasto.js';
-import { esc, icon, money, signedMoney, parseAmount, amountToInput, toast, currencySymbol } from '../ui.js';
+import { esc, icon, money, signedMoney, parseAmount, amountToInput, toast, currencySymbol, CUR } from '../ui.js';
+import { LOCALE } from '../i18n.js';
 
 const SOURCE = { atajo: 'Apple Pay', url: 'Atajo', recurrente: 'Recurrente', buzon: 'Buzón' };
 
-const timeFmt = new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit' });
-const dayFmt = new Intl.DateTimeFormat('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+const timeFmt = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit' });
+const dayFmt = new Intl.DateTimeFormat(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
 
 /** Cuándo llegó: "Hoy · 14:32", "Ayer · 21:10" o "lun 13 oct · 09:15". */
 function arrived(t) {
@@ -110,7 +111,7 @@ export function render(root, { navigate }) {
 
       <div class="amount-input">
         <input id="rv-amount" class="num" inputmode="decimal" autocomplete="off" aria-label="Importe" value="${esc(amountToInput(t.amount))}">
-        <span class="currency">€</span>
+        <span class="currency">${CUR}</span>
       </div>
       ${t.currency ? `<div class="amount-hint">Original: ${esc(amountToInput(t.originalAmount))} ${currencySymbol(t.currency)}</div>` : '<div class="amount-hint"></div>'}
 

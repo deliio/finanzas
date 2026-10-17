@@ -14,7 +14,8 @@ import * as guia from './views/guia.js';
 import { pullMailbox } from './mailbox.js';
 import { getState, setSetting, runRecurring, runCardCharges, creditCards } from './store.js';
 import { snapshotNetWorth } from './networth.js';
-import { toast, icon } from './ui.js';
+import { toast, icon, money } from './ui.js';
+import { startI18n } from './i18n.js';
 
 const routes = { inicio: dashboard, movimientos, nuevo, patrimonio, ajustes, analisis, mapa, informes, revisar, guia };
 // Vistas sin pestaña propia: resaltan la pestaña de la que cuelgan.
@@ -55,7 +56,7 @@ function applyRecurring() {
   const charges = runCardCharges();
   if (charges.length) {
     const name = (id) => creditCards().find((c) => c.id === id)?.name || 'Tarjeta';
-    toast(charges.length === 1 ? `${name(charges[0].cardId)}: cargo de ${charges[0].amount.toFixed(2).replace('.', ',')} €` : `${charges.length} cargos de tarjeta aplicados`);
+    toast(charges.length === 1 ? `${name(charges[0].cardId)}: cargo de ${money(charges[0].amount)}` : `${charges.length} cargos de tarjeta aplicados`);
   }
   const added = runRecurring();
   if (added) toast(added === 1 ? '1 pago recurrente añadido' : `${added} pagos recurrentes añadidos`);
@@ -102,6 +103,7 @@ function checkMailbox() {
   }).catch(() => { /* sin conexión o buzón mal configurado: se reintenta al volver */ });
 }
 
+startI18n(); // en inglés traduce todo lo que se pinte
 applyRecurring();
 snapshotNetWorth();
 window.addEventListener('hashchange', render);

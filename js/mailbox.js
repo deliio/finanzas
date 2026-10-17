@@ -10,6 +10,7 @@
 import { getState, setSetting, addTransaction, suggestCategory, validLocation, round2, todayISO, accountForWalletCard } from './store.js';
 import { parseAmount } from './ui.js';
 import { fetchRateToEur } from './market.js';
+import { BASE } from './i18n.js';
 
 export const mailboxConfig = () => getState().settings.mailbox || {};
 export const mailboxReady = () => Boolean(mailboxConfig().url && mailboxConfig().token);
@@ -55,7 +56,7 @@ export async function testMailbox(config) {
 }
 
 const coord = (s) => Number(String(s ?? '').trim().replace(',', '.').replace(/[^\d.-]/g, ''));
-const currencyOf = (raw = '') => (/£|GBP/i.test(raw) ? 'GBP' : /\$|USD/i.test(raw) ? 'USD' : 'EUR');
+const currencyOf = (raw = '') => (/£|GBP/i.test(raw) ? 'GBP' : /\$|USD/i.test(raw) ? 'USD' : /€|EUR/i.test(raw) ? 'EUR' : BASE);
 
 let busy = false;
 
@@ -88,7 +89,7 @@ export async function pullMailbox() {
       const currency = currencyOf(String(it.amount));
       const date = it.at ? todayISO(new Date(it.at)) : todayISO();
       let rate = 1;
-      if (currency !== 'EUR') {
+      if (currency !== BASE) {
         try { ({ rate } = await fetchRateToEur(currency, date)); } catch { /* sin cambio: se revisará el importe */ }
       }
       const merchant = String(it.merchant || '').trim();

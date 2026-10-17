@@ -2,7 +2,7 @@
 // Busca por concepto, categoría, #etiqueta o importe ("23,40", "23.4", ">100").
 
 import { getState, transactionsSorted, categoryById, deleteTransaction, payerById, debtRemaining, deleteDebt } from '../store.js';
-import { txRow, dayLabel, toast, esc, money, signedMoney, icon, privacyButton, openSheet, amountToInput, currencySymbol, parseAmount, shortDate, splitCount } from '../ui.js';
+import { txRow, dayLabel, toast, esc, money, signedMoney, icon, privacyButton, openSheet, amountToInput, currencySymbol, parseAmount, shortDate, splitCount, CUR, DECIMAL } from '../ui.js';
 
 let lastQuery = '';   // se conserva al cambiar de pestaña
 let lastType = 'all';
@@ -108,7 +108,7 @@ export function openTxSheet(id, onDone) {
     ['Fecha', shortDate(t.date)],
     ['Categoría', esc(cat.name)],
     account && ['Cuenta', esc(account.name)],
-    t.currency && ['Importe original', `<span class="num">${amountToInput(t.originalAmount)} ${currencySymbol(t.currency)}</span> · 1 ${currencySymbol(t.currency)} = ${String(t.fxRate).replace('.', ',')} €`],
+    t.currency && ['Importe original', `<span class="num">${amountToInput(t.originalAmount)} ${currencySymbol(t.currency)}</span> · 1 ${currencySymbol(t.currency)} = ${String(t.fxRate).replace('.', DECIMAL)} ${CUR}`],
     t.paidBy && ['Pagado por', `${esc(payerById(t.paidBy).name)} · no resta de tus cuentas`],
     linked.length && ['Te deben', linked.map((d) => `${esc(d.person)} <span class="num">${money(debtRemaining(d))}</span>`).join(' · ')],
     t.split && ['Compartido', `Entre ${splitCount(t)} · guardada tu parte`],

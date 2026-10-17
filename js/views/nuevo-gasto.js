@@ -9,9 +9,11 @@
 import { addTransaction, categoriesOf, todayISO, getState, setSetting, allTags, normalizeTags, round2, validLocation, suggestCategory,
   payers, payerById, addDebt, knownDebtors, persist } from '../store.js';
 import { fetchRateToEur } from '../market.js';
-import { esc, parseAmount, amountToInput, toast, icon, money, currencySymbol } from '../ui.js';
+import { esc, parseAmount, amountToInput, toast, icon, money, currencySymbol, CUR, DECIMAL } from '../ui.js';
+import { BASE, CURRENCIES as ALL_CURRENCIES } from '../i18n.js';
 
-const CURRENCIES = ['EUR', 'GBP', 'USD'];
+// Al tocar el símbolo: moneda principal → las otras habituales → vuelta.
+const CURRENCIES = [BASE, ...['EUR', 'GBP', 'USD'].filter((c) => c !== BASE)];
 
 const PARAM_ALIASES = {
   amount:      ['importe', 'amount', 'cantidad'],
@@ -56,7 +58,7 @@ export function readPrefillFromURL(loc = window.location) {
   const amount = parseAmount(rawAmount);
   const rawType = (pick(PARAM_ALIASES.type) || '').toLowerCase();
   const date = pick(PARAM_ALIASES.date);
-  const currency = (pick(PARAM_ALIASES.currency) || detectCurrency(rawAmount) || 'EUR').toUpperCase();
+  const currency = (pick(PARAM_ALIASES.currency) || detectCurrency(rawAmount) || BASE).toUpperCase();
 
   return {
     amount: Number.isFinite(amount) ? Math.abs(amount) : null,
@@ -65,7 +67,7 @@ export function readPrefillFromURL(loc = window.location) {
     date: /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date : null,
     type: rawIncome != null || ['ingreso', 'income'].includes(rawType) ? 'income' : 'expense',
     tags: normalizeTags(pick(PARAM_ALIASES.tags) || ''),
-    currency: CURRENCIES.includes(currency) ? currency : 'EUR',
+    currency: ALL_CURRENCIES.includes(currency) ? currency : BASE,
     location: validLocation({ lat: coord(pick(PARAM_ALIASES.lat)), lon: coord(pick(PARAM_ALIASES.lon)) }),
   };
 }
@@ -94,7 +96,7 @@ export function parseClipboardPayment(text = '') {
     return {
       amount: Math.abs(amount), description: merchant.trim(), category: null, date: null, tags: [],
       type: /INGRESO/i.test(m[1]) ? 'income' : 'expense',
-      currency: detectCurrency(m[2]) || 'EUR',
+      currency: detectCurrency(m[2]) || BASE,
       location: validLocation({ lat: coord(lat), lon: coord(lon) }),
       source: 'clipboard',
     };
@@ -117,7 +119,7 @@ export async function quickSavePending(prefill) {
   const type = prefill.type === 'income' ? 'income' : 'expense';
   const valid = categoriesOf(type).some((c) => c.id === prefill.category);
   const category = valid ? prefill.category : suggestCategory(prefill.description, type);
-  const currency = prefill.currency || 'EUR';
+  const currency = prefill.currency || BASE;
   const { rate } = await fetchRateToEur(currency, prefill.date || todayISO()); // lanza si no hay conexión
   const liquid = getState().accounts.filter((a) => a.kind === 'liquidez' || a.kind === 'tarjeta').map((a) => a.id);
   const last = getState().settings.lastAccount;
@@ -169,7 +171,7 @@ export function render(root, { prefill, navigate }) {
   const form = {
     type: prefill?.type ?? 'expense',
     amount: prefill?.amount ?? null,     // en la divisa elegida, antes de dividir
-    currency: prefill?.currency ?? 'EUR',
+    currency: prefill?.currency ?? BASE,
     rate: 1,                             // € por 1 unidad de la divisa
     rateState: 'ok',                     // ok | loading | error
     split: 1,                            // nº de personas entre las que se divide (1 = no compartido)
@@ -362,12 +364,12 @@ export function render(root, { prefill, navigate }) {
 
   function renderHint() {
     const parts = [];
-    if (form.currency !== 'EUR') {
+    if (form.currency !== BASE) {
       if (form.rateState === 'loading') parts.push('Consultando tipo de cambio…');
       else if (form.rateState === 'error') parts.push('<span class="neg">Sin tipo de cambio (¿sin conexión?)</span>');
-      else parts.push(`1 ${currencySymbol(form.currency)} = ${form.rate.toFixed(4).replace('.', ',')} €`);
+      else parts.push(`1 ${currencySymbol(form.currency)} = ${form.rate.toFixed(4).replace('.', DECIMAL)} ${CUR}`);
     }
-    if (form.amount && (form.split > 1 || form.currency !== 'EUR') && form.rateState === 'ok' && finalEur() >= 0) {
+    if (form.amount && (form.split > 1 || form.currency !== BASE) && form.rateState === 'ok' && finalEur() >= 0) {
       parts.push(`Se guardará <strong class="num">${money(finalEur())}</strong>${form.split > 1 ? ' (tu parte)' : ''}`);
     }
     if (sharing() && form.amount && shares().mine < 0) parts.push('<span class="neg">Las partes de los demás superan el total</span>');
@@ -387,7 +389,7 @@ export function render(root, { prefill, navigate }) {
   }
 
   async function updateRate() {
-    if (form.currency === 'EUR') { form.rate = 1; form.rateState = 'ok'; validate(); return; }
+    if (form.currency === BASE) { form.rate = 1; form.rateState = 'ok'; validate(); return; }
     form.rateState = 'loading';
     validate();
     const wanted = form.currency;
@@ -428,7 +430,7 @@ export function render(root, { prefill, navigate }) {
     root.querySelectorAll('.p-cur').forEach((el) => (el.textContent = currencySymbol(form.currency)));
     updateRate();
   });
-  $('#nt-date').addEventListener('change', () => form.currency !== 'EUR' && updateRate());
+  $('#nt-date').addEventListener('change', () => form.currency !== BASE && updateRate());
 
   root.querySelectorAll('[data-payer]').forEach((b) => b.addEventListener('click', () => {
     form.paidBy = b.dataset.payer;
@@ -517,7 +519,7 @@ export function render(root, { prefill, navigate }) {
   renderType();
   syncPeople();
   validate();
-  if (form.currency !== 'EUR') updateRate();
+  if (form.currency !== BASE) updateRate();
   // Si el usuario lo dejó activado, pedimos la ubicación al abrir (salvo que venga del Atajo).
   if (!form.location && getState().settings.saveLocation) requestLocation();
 
