@@ -1,6 +1,6 @@
 // Cálculo centralizado del patrimonio (lo usan Patrimonio, el histórico y las gráficas).
 
-import { getState, accountValue, recordSnapshot, openDebts, debtRemaining } from './store.js';
+import { getState, accountValue, recordSnapshot, openDebts, debtRemaining, creditCards, cardPending } from './store.js';
 import { portfolioSummary } from './market.js';
 
 export function computeNetWorth() {
@@ -13,14 +13,16 @@ export function computeNetWorth() {
   // Lo que te deben sigue siendo tuyo: cuenta como activo.
   const meDeben = openDebts().reduce((s, d) => s + debtRemaining(d), 0);
   const activos = sum('activo') + inversiones + meDeben;
-  const deudas = sum('deuda');
+  // Lo gastado con tarjeta de crédito y aún no cobrado es una deuda hasta el día de cobro.
+  const tarjetas = creditCards().reduce((s, c) => s + cardPending(c), 0);
+  const deudas = sum('deuda') + tarjetas;
   const net = liquidez + activos - deudas;
 
   const enHuchas = goals.reduce((s, g) => s + g.saved, 0);
   const pendiente = pending.reduce((s, p) => s + p.amount, 0);
 
   return {
-    liquidez, activos, inversiones, deudas, net, funds, meDeben,
+    liquidez, activos, inversiones, deudas, net, funds, meDeben, tarjetas,
     enHuchas,
     disponible: liquidez - enHuchas, // liquidez no reservada en huchas
     pendiente,

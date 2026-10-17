@@ -11,7 +11,7 @@ import * as informes from './views/informes.js';
 import { readPrefillFromURL, quickSavePending } from './views/nuevo-gasto.js';
 import * as revisar from './views/revisar.js';
 import { pullMailbox } from './mailbox.js';
-import { getState, setSetting, runRecurring } from './store.js';
+import { getState, setSetting, runRecurring, runCardCharges, creditCards } from './store.js';
 import { snapshotNetWorth } from './networth.js';
 import { toast, icon } from './ui.js';
 
@@ -50,9 +50,15 @@ if (pendingPrefill && getState().settings.reviewEnabled && pendingPrefill.amount
 
 // --- Gastos recurrentes (#8) -------------------------------------------
 function applyRecurring() {
+  // Cargos de tarjetas de crédito del día de cobro (también atrasados).
+  const charges = runCardCharges();
+  if (charges.length) {
+    const name = (id) => creditCards().find((c) => c.id === id)?.name || 'Tarjeta';
+    toast(charges.length === 1 ? `${name(charges[0].cardId)}: cargo de ${charges[0].amount.toFixed(2).replace('.', ',')} €` : `${charges.length} cargos de tarjeta aplicados`);
+  }
   const added = runRecurring();
   if (added) toast(added === 1 ? '1 pago recurrente añadido' : `${added} pagos recurrentes añadidos`);
-  return added;
+  return added + charges.length;
 }
 
 function currentRoute() {

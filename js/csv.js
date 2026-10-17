@@ -33,6 +33,7 @@ export function stateToCSV(state) {
   push('historico',  state.history,    (h) => [h.date, '', h.net, '', '']);
   push('deuda',      state.debts,      (d) => [d.createdAt.slice(0, 10), '', d.amount, d.person, '']);
   push('nota',       state.notes,      (n) => [n.updatedAt.slice(0, 10), '', '', n.text.split('\n')[0].slice(0, 60), '']);
+  push('cargo',      state.cardCharges || [], (c) => [c.date, '', c.amount, '', '']);
 
   // La clave API no se exporta: el CSV puede acabar en iCloud, correo…
   const { finnhubKey, ...settings } = state.settings;
@@ -48,9 +49,9 @@ export function csvToState(text) {
   const get = (r, col) => r[idx[col]] ?? '';
   const json = (r) => { try { return JSON.parse(get(r, 'datos') || '{}'); } catch { return {}; } };
 
-  const next = { transactions: [], categories: [], accounts: [], holdings: [], recurring: [], goals: [], pending: [], history: [], debts: [], notes: [], settings: {} };
+  const next = { transactions: [], categories: [], accounts: [], holdings: [], recurring: [], goals: [], pending: [], history: [], debts: [], notes: [], cardCharges: [], settings: {} };
   const target = { categoria: 'categories', cuenta: 'accounts', posicion: 'holdings', recurrente: 'recurring', hucha: 'goals',
-    pendiente: 'pending', historico: 'history', deuda: 'debts', nota: 'notes' };
+    pendiente: 'pending', historico: 'history', deuda: 'debts', nota: 'notes', cargo: 'cardCharges' };
 
   for (const r of rows) {
     if (r.length < 2) continue;

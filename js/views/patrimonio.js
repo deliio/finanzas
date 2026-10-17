@@ -3,7 +3,8 @@
 
 import { getState, addAccount, updateAccount, deleteAccount, accountValue, accountBreakdown, addHolding, updateHolding, deleteHolding, setMarketData, round2, todayISO,
   addGoal, updateGoal, deleteGoal, addPending, deletePending, addTransaction, categoriesOf,
-  openDebts, debtRemaining, debtPaid, addDebt, addDebtPayment, deleteDebt, knownDebtors, saveNote, deleteNote } from '../store.js';
+  openDebts, debtRemaining, debtPaid, addDebt, addDebtPayment, deleteDebt, knownDebtors, saveNote, deleteNote,
+  creditCards, cardPending, nextChargeDate } from '../store.js';
 import { MIRROR_PRESETS, hasApiKey, fetchQuote, fetchEurUsd, refreshMarket, estimateHolding } from '../market.js';
 import { computeNetWorth, snapshotNetWorth } from '../networth.js';
 import { money, esc, parseAmount, toast, icon, usd, signedPct, signedEur, tone, openSheet, privacyButton, shortDate } from '../ui.js';
@@ -102,6 +103,16 @@ export function render(root) {
           <span class="trail num pos">+${money(p.amount)}</span>
         </button>`).join('')}</div>`
         : `<div class="card empty" style="padding:18px">Becas, devoluciones de Hacienda… Se suman a la proyección, no a tu liquidez.</div>`}
+
+      ${creditCards().length ? `<div class="section-title">Tarjetas de crédito <a href="#/ajustes">Ajustes</a></div>
+      <div class="list">${creditCards().map((c) => `
+        <div class="row">
+          <span class="icon">${icon('card')}</span>
+          <span class="main"><div class="title">${esc(c.name)}</div>
+            <div class="subtitle">Se cobra el ${new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' }).format(new Date(nextChargeDate(c) + 'T00:00:00'))} de ${esc(accounts.find((a) => a.id === c.chargeAccount)?.name || '—')}</div></span>
+          <span class="trail num neg">−${money(cardPending(c))}</span>
+        </div>`).join('')}</div>
+      <p class="hint" style="margin:8px 4px 0">Lo gastado con tarjeta cuenta como deuda hasta el día de cobro.</p>` : ''}
 
       <div class="section-title">Me deben <button class="link-btn" data-action="add-debt">+ Añadir</button></div>
       ${debtsHtml()}

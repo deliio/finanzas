@@ -3,7 +3,9 @@
 
 import { getState, replaceState, resetState, todayISO, setSetting, addRecurring, updateRecurring, deleteRecurring,
   runRecurring, categoriesOf, categoryById, normalizeTags, round2, setBudget, payers, payerById, addPayer, updatePayer, removePayer, pendingReview, markAllReviewed,
-  addCategory, updateCategory, deleteCategory, categoryUsage, fallbackCategory } from '../store.js';
+  addCategory, updateCategory, deleteCategory, categoryUsage, fallbackCategory,
+  creditCards, addCreditCard, updateCreditCard, deleteAccount, cardPending, nextChargeDate } from '../store.js';
+import { accountOptionsHtml } from './nuevo-gasto.js';
 import { ICONS } from '../icons.js';
 import { fetchQuote, estimateHolding } from '../market.js';
 import { mailboxConfig, mailboxReady, newToken, testMailbox, pullMailbox, mailboxScript } from '../mailbox.js';
@@ -42,6 +44,16 @@ export function render(root) {
           <b style="color:var(--text)">sin abrir la app</b> y al entrar ya los tienes en pendientes. Gratis; sirve para toda la familia.</p>
         <button class="btn btn-primary" type="button" data-action="mailbox">Configurar buzón</button>
       </div>`}
+
+    <div class="section-title">Tarjetas de crédito <button class="link-btn" data-action="add-card">+ Añadir</button></div>
+    ${creditCards().length ? `<div class="list">${creditCards().map((c) => `
+      <button class="row" data-card="${esc(c.id)}">
+        <span class="icon">${icon('card')}</span>
+        <span class="main"><div class="title">${esc(c.name)}</div>
+          <div class="subtitle">Se cobra ${c.chargeDay === 31 ? 'el último día del mes' : `el día ${c.chargeDay}`} de ${esc(accounts.find((a) => a.id === c.chargeAccount)?.name || '—')}</div></span>
+        <span class="trail num neg">${cardPending(c) ? '−' + money(cardPending(c)) : ''}</span>
+      </button>`).join('')}</div>`
+      : `<div class="card empty" style="padding:18px">¿Tienes una tarjeta que te cobra todo a fin de mes? Añádela: sus gastos cuentan al momento, pero no bajan tu cuenta hasta el día de cobro.</div>`}
 
     <div class="section-title">Pagos recurrentes <button class="link-btn" data-action="add-rec">+ Añadir</button></div>
     ${recurring.length ? `<div class="list">${recurring.map((r) => {
@@ -149,6 +161,9 @@ export function render(root) {
     if (e.target.closest('[data-action="add-cat"]')) return openCategorySheet(null, catKind, () => render(root));
     const catEdit = e.target.closest('[data-cat-edit]');
     if (catEdit) return openCategorySheet(catEdit.dataset.catEdit, catKind, () => render(root));
+    if (e.target.closest('[data-action="add-card"]')) return openCardSheet(null, () => render(root));
+    const card = e.target.closest('[data-card]');
+    if (card) return openCardSheet(card.dataset.card, () => render(root));
     if (e.target.closest('[data-action="add-payer"]')) return openPayerSheet(null, () => render(root));
     const p = e.target.closest('[data-payer]');
     if (p) openPayerSheet(p.dataset.payer, () => render(root));
@@ -384,6 +399,53 @@ function openCategorySheet(categoryId, kind, onDone) {
   paint();
 }
 
+/* ---------- Tarjetas de crédito ---------------------------------------- */
+
+const dateFmt = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'long' });
+const niceDate = (iso) => dateFmt.format(new Date(iso + 'T00:00:00'));
+
+function openCardSheet(id, onDone) {
+  const c = id ? creditCards().find((x) => x.id === id) : null;
+  const banks = getState().accounts.filter((a) => a.kind === 'liquidez');
+  if (!banks.length) return alert('Primero añade en Patrimonio la cuenta del banco desde la que se cobra la tarjeta.');
+  const pending = c ? cardPending(c) : 0;
+  const charges = c ? (getState().cardCharges || []).filter((x) => x.cardId === c.id).slice(-6).reverse() : [];
+  const { el, close } = openSheet(`
+    <h3 class="sheet-title">${c ? esc(c.name) : 'Nueva tarjeta de crédito'}</h3>
+    ${c ? `<div class="goal-hero"><div class="num neg" style="font-size:28px;font-weight:700">${pending ? '−' + money(pending) : money(0)}</div>
+      <div class="muted">pendiente · se cobra el ${niceDate(nextChargeDate(c))}</div></div>` : ''}
+    <div class="field-group" style="margin-top:12px">
+      <div class="field"><label for="cc-name">Nombre</label>
+        <input id="cc-name" maxlength="24" placeholder="Visa Abanca" autocomplete="off" value="${esc(c?.name ?? '')}"></div>
+      <div class="field"><label for="cc-acc">Se cobra de</label>
+        <select id="cc-acc">${banks.map((a) => `<option value="${esc(a.id)}" ${a.id === c?.chargeAccount ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="cc-day">Día de cobro</label>
+        <input id="cc-day" type="number" inputmode="numeric" min="1" max="31" value="${c?.chargeDay ?? 31}"></div>
+    </div>
+    <p class="hint" style="margin-top:-8px">31 = último día del mes. Ese día se resta de la cuenta todo lo gastado con la tarjeta desde el cobro anterior.</p>
+    ${charges.length ? `<div class="section-title" style="font-size:16px">Últimos cobros</div>
+      <div class="list kv">${charges.map((x) => `<div class="row"><span class="main">${niceDate(x.date)}</span><span class="trail num">−${money(x.amount)}</span></div>`).join('')}</div>` : ''}
+    <button class="btn btn-primary" type="button" id="cc-save" style="margin-top:14px">Guardar</button>
+    ${c ? '<button class="btn btn-danger" type="button" id="cc-del">Quitar tarjeta</button>' : ''}
+    <button class="btn" type="button" data-close>Cancelar</button>
+  `);
+  const $ = (s) => el.querySelector(s);
+  $('#cc-save').addEventListener('click', () => {
+    const name = $('#cc-name').value.trim();
+    const chargeDay = Number($('#cc-day').value);
+    if (!name) return toast('Ponle un nombre');
+    if (!(chargeDay >= 1 && chargeDay <= 31)) return toast('El día debe estar entre 1 y 31');
+    const data = { name, chargeAccount: $('#cc-acc').value, chargeDay };
+    if (c) updateCreditCard(c.id, data); else addCreditCard(data);
+    close(); toast(c ? 'Tarjeta guardada' : 'Tarjeta añadida: ya puedes elegirla al apuntar gastos'); onDone();
+  });
+  $('#cc-del')?.addEventListener('click', () => {
+    const msg = pending ? `Tiene ${money(pending)} pendientes que ya no se cobrarán de la cuenta. ¿Quitar ${c.name}?` : `¿Quitar ${c.name}?`;
+    if (!confirm(msg)) return;
+    deleteAccount(c.id); close(); onDone();
+  });
+}
+
 /* ---------- Pagado por otras personas ---------------------------------- */
 
 function openPayerSheet(id, onDone) {
@@ -422,7 +484,7 @@ function openPayerSheet(id, onDone) {
 function openRecurringForm(id, onDone) {
   const r = id ? getState().recurring.find((x) => x.id === id) : null;
   let type = r?.type ?? 'expense';
-  const accounts = getState().accounts.filter((a) => a.kind === 'liquidez');
+  const accounts = getState().accounts.filter((a) => a.kind === 'liquidez' || a.kind === 'tarjeta');
 
   const { el, close } = openSheet(`
     <h3 class="sheet-title">${r ? 'Pago recurrente' : 'Nuevo pago recurrente'}</h3>
@@ -440,7 +502,7 @@ function openRecurringForm(id, onDone) {
           <input id="r-day" type="number" inputmode="numeric" min="1" max="31" required placeholder="1-31" value="${r?.day ?? ''}"></div>
         <div class="field"><label for="r-cat">Categoría</label><select id="r-cat"></select></div>
         ${accounts.length ? `<div class="field"><label for="r-acc">Cuenta</label>
-          <select id="r-acc">${accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === r?.account ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
+          <select id="r-acc">${accountOptionsHtml(accounts, r?.account)}
             <option value="" ${r && !r.account ? 'selected' : ''}>Ninguna</option></select></div>` : ''}
         ${payers().length ? `<div class="field" id="r-payer-row"><label for="r-payer">Lo paga</label>
           <select id="r-payer"><option value="">Yo</option>

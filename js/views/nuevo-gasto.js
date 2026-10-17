@@ -119,7 +119,7 @@ export async function quickSavePending(prefill) {
   const category = valid ? prefill.category : suggestCategory(prefill.description, type);
   const currency = prefill.currency || 'EUR';
   const { rate } = await fetchRateToEur(currency, prefill.date || todayISO()); // lanza si no hay conexión
-  const liquid = getState().accounts.filter((a) => a.kind === 'liquidez').map((a) => a.id);
+  const liquid = getState().accounts.filter((a) => a.kind === 'liquidez' || a.kind === 'tarjeta').map((a) => a.id);
   const last = getState().settings.lastAccount;
   const tx = addTransaction({
     type, category, amount: round2(prefill.amount * rate),
@@ -153,6 +153,16 @@ export async function pastePayment(navigate) {
   navigate('nuevo', prefill);
 }
 
+/** <option>s de cuentas y, aparte, de tarjetas de crédito. */
+export function accountOptionsHtml(accounts, selected) {
+  const opt = (a) => `<option value="${esc(a.id)}" ${a.id === selected ? 'selected' : ''}>${esc(a.name)}</option>`;
+  const banks = accounts.filter((a) => a.kind !== 'tarjeta');
+  const cards = accounts.filter((a) => a.kind === 'tarjeta');
+  return cards.length
+    ? `<optgroup label="Cuentas">${banks.map(opt).join('')}</optgroup><optgroup label="Tarjetas de crédito">${cards.map(opt).join('')}</optgroup>`
+    : banks.map(opt).join('');
+}
+
 export function render(root, { prefill, navigate }) {
   document.body.classList.add('is-modal');
 
@@ -171,7 +181,8 @@ export function render(root, { prefill, navigate }) {
     category: null,
   };
   // Cuenta: la última usada (si sigue existiendo) o la primera de liquidez.
-  const accounts = getState().accounts.filter((a) => a.kind === 'liquidez');
+  // Cuentas y tarjetas de crédito (estas se cobran el día de cobro desde su cuenta).
+  const accounts = getState().accounts.filter((a) => a.kind === 'liquidez' || a.kind === 'tarjeta');
   const last = getState().settings.lastAccount;
   const defaultAccount = accounts.some((a) => a.id === last) ? last : (accounts[0]?.id ?? '');
 
@@ -218,7 +229,7 @@ export function render(root, { prefill, navigate }) {
       ${accounts.length ? `<div class="field" id="nt-account-row">
         <label for="nt-account">Cuenta</label>
         <select id="nt-account">
-          ${accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === defaultAccount ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}
+          ${accountOptionsHtml(accounts, defaultAccount)}
           <option value="" ${defaultAccount ? '' : 'selected'}>Ninguna</option>
         </select>
       </div>` : ''}

@@ -75,7 +75,7 @@ export async function pullMailbox() {
     setSetting('mailboxLog', [...log, ...(getState().settings.mailboxLog || [])].slice(0, 8));
 
     const seen = new Set(getState().settings.mailboxSeen || []);
-    const liquid = getState().accounts.filter((a) => a.kind === 'liquidez').map((a) => a.id);
+    const liquid = getState().accounts.filter((a) => a.kind === 'liquidez' || a.kind === 'tarjeta').map((a) => a.id);
     const last = getState().settings.lastAccount;
     let added = 0;
 

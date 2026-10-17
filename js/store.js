@@ -61,6 +61,8 @@ function defaultState() {
     // Me deben: { id, person, concept, amount, account (de dónde salió el dinero), txId, createdAt,
     //             payments: [{ id, amount, account, at }] }
     debts: [],
+    // Cargos de tarjetas de crédito: { id, cardId, account, amount, date (día de cobro), from, at }
+    cardCharges: [],
     notes: [],        // { id, text, createdAt, updatedAt }
     // payers: personas que te pagan gastos (opcional): { id, name, archived }
     settings: { currency: 'EUR', finnhubKey: '', privacy: false, lifestyle: { ...DEFAULT_LIFESTYLE }, payers: [] },
@@ -328,6 +330,10 @@ export function accountBreakdown(a, today = todayISO()) {
     for (const t of state.transactions) {
       if (t.account === a.id && !t.paidBy && t.createdAt > since) flows += t.type === 'income' ? t.amount : -t.amount;
     }
+    // Cargos de tarjetas de crédito: el total del mes sale de la cuenta el día de cobro.
+    for (const c of state.cardCharges) {
+      if (c.account === a.id && c.at > since) flows -= c.amount;
+    }
     // Dinero prestado (sale de la cuenta) y lo que te van devolviendo (entra).
     for (const d of state.debts) {
       if (d.account === a.id && d.createdAt > since) flows -= d.amount;
@@ -426,6 +432,92 @@ export function setMarketData(quotes, fx) {
   state.quotes = { ...state.quotes, ...quotes };
   if (fx) state.fx = fx;
   persist();
+}
+
+/* ---------- Tarjetas de crédito (cargo diferido) ---------------------- */
+// Una tarjeta es una cuenta { kind: 'tarjeta', name, chargeAccount, chargeDay, lastChargeDate }.
+// Sus gastos cuentan como gasto al momento, pero no salen del banco hasta el día de cobro,
+// en el que se genera un cargo con el total del periodo contra la cuenta elegida.
+
+export const creditCards = () => state.accounts.filter((a) => a.kind === 'tarjeta');
+export const isCard = (id) => creditCards().some((c) => c.id === id);
+
+/** Fecha de cobro de un mes 'YYYY-MM' (el día 31 se ajusta al último día del mes). */
+function chargeDateOf(key, day) {
+  const [y, m] = key.split('-').map(Number);
+  return `${key}-${String(Math.min(day, new Date(y, m, 0).getDate())).padStart(2, '0')}`;
+}
+
+/** Primera fecha de cobro posterior a `after` (YYYY-MM-DD). */
+export function nextChargeDate(card, after = card.lastChargeDate) {
+  let key = after.slice(0, 7);
+  let d = chargeDateOf(key, card.chargeDay);
+  if (d <= after) { key = nextMonthKey(key); d = chargeDateOf(key, card.chargeDay); }
+  return d;
+}
+
+function lastChargeOnOrBefore(day, today) {
+  const d = chargeDateOf(today.slice(0, 7), day);
+  return d <= today ? d : chargeDateOf(prevMonthKey(today.slice(0, 7)), day);
+}
+
+/** Lo cargado a la tarjeta entre dos fechas (from, to]: gastos − devoluciones + préstamos pagados con ella. */
+function cardSum(card, from, to) {
+  let sum = 0;
+  for (const t of state.transactions) {
+    if (t.account !== card.id || t.paidBy || t.date <= from || t.date > to) continue;
+    sum += t.type === 'income' ? -t.amount : t.amount;
+  }
+  for (const d of state.debts) {
+    const day = d.createdAt.slice(0, 10);
+    if (d.account === card.id && day > from && day <= to) sum += d.amount;
+  }
+  return round2(sum);
+}
+
+/** Pendiente de cobro de la tarjeta (desde el último cargo). */
+export const cardPending = (card) => cardSum(card, card.lastChargeDate, '9999-12-31');
+
+export function addCreditCard({ name, chargeAccount, chargeDay }) {
+  const day = Math.min(31, Math.max(1, Math.round(chargeDay) || 31));
+  const card = { id: uid(), kind: 'tarjeta', name: name.trim(), chargeAccount, chargeDay: day, balance: 0,
+    updatedAt: todayISO(), lastChargeDate: lastChargeOnOrBefore(day, todayISO()) };
+  state.accounts.push(card);
+  persist();
+  return card;
+}
+
+export function updateCreditCard(id, { name, chargeAccount, chargeDay }) {
+  const c = state.accounts.find((a) => a.id === id && a.kind === 'tarjeta');
+  if (!c) return;
+  if (name) c.name = name.trim();
+  if (chargeAccount !== undefined) c.chargeAccount = chargeAccount;
+  if (chargeDay) c.chargeDay = Math.min(31, Math.max(1, Math.round(chargeDay)));
+  persist();
+}
+
+/**
+ * Genera los cargos de las tarjetas cuyo día de cobro ya ha llegado (también los atrasados
+ * si no abriste la app). Devuelve los cargos creados.
+ */
+export function runCardCharges(today = todayISO()) {
+  const created = [];
+  for (const card of creditCards()) {
+    let next = nextChargeDate(card);
+    while (next <= today) {
+      const amount = cardSum(card, card.lastChargeDate, next);
+      if (amount > 0) {
+        const charge = { id: uid(), cardId: card.id, account: card.chargeAccount, amount, date: next,
+          from: card.lastChargeDate, at: new Date().toISOString() };
+        state.cardCharges.push(charge);
+        created.push(charge);
+      }
+      card.lastChargeDate = next;
+      next = nextChargeDate(card);
+    }
+  }
+  if (created.length) persist();
+  return created;
 }
 
 /* ---------- Gastos recurrentes --------------------------------------- */
