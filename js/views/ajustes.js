@@ -1,4 +1,4 @@
-// Ajustes: pagos recurrentes (#8), copia de seguridad, exportación Power BI (#16),
+// Ajustes: idioma y moneda, buzón, tarjetas, presupuestos, categorías, copia de seguridad, exportación Power BI (#16),
 // clave de Finnhub y borrado de datos.
 
 import { getState, replaceState, resetState, todayISO, setSetting, addRecurring, updateRecurring, deleteRecurring,
@@ -8,7 +8,7 @@ import { getState, replaceState, resetState, todayISO, setSetting, addRecurring,
 import { accountOptionsHtml } from './nuevo-gasto.js';
 import { ICONS } from '../icons.js';
 import { fetchQuote, estimateHolding } from '../market.js';
-import { mailboxConfig, mailboxReady, newToken, testMailbox, pullMailbox, mailboxScript } from '../mailbox.js';
+import { mailboxConfig, mailboxReady, newToken, testMailbox, pullMailbox, mailboxScript, locationStatus } from '../mailbox.js';
 import { stateToCSV, csvToState, powerBIFiles } from '../csv.js';
 import { toast, esc, usd, money, icon, openSheet, parseAmount, amountToInput, CUR } from '../ui.js';
 import { LOCALE, LANG, LANGUAGES, BASE, CURRENCIES, currencyName } from '../i18n.js';
@@ -67,19 +67,6 @@ export function render(root) {
         <span class="trail num neg">${cardPending(c) ? '−' + money(cardPending(c)) : ''}</span>
       </button>`).join('')}</div>`
       : `<div class="card empty" style="padding:18px">¿Tienes una tarjeta que te cobra todo a fin de mes? Añádela: sus gastos cuentan al momento, pero no bajan tu cuenta hasta el día de cobro.</div>`}
-
-    <div class="section-title">Pagos recurrentes <button class="link-btn" data-action="add-rec">+ Añadir</button></div>
-    ${recurring.length ? `<div class="list">${recurring.map((r) => {
-      const cat = categoryById(r.category);
-      return `<button class="row ${r.active ? '' : 'is-paused'}" data-rec="${esc(r.id)}">
-        <span class="icon">${icon(cat.icon)}</span>
-        <span class="main"><div class="title">${esc(r.name)}</div>
-          <div class="subtitle">Día ${r.day} de cada mes · ${esc(cat.name)}${r.paidBy ? ` · <span class="papi-tag">${esc(payerById(r.paidBy).name)}</span>` : ''}${r.active ? '' : ' · <strong>en pausa</strong>'}</div></span>
-        <span class="trail num ${r.type === 'income' ? 'pos' : 'neg'}">${r.type === 'income' ? '+' : '−'}${money(r.amount)}</span>
-      </button>`;
-    }).join('')}</div>
-    <p class="hint" style="margin:8px 4px 0">Se apuntan solos el día de cobro al abrir la app (y los atrasados si no la abriste).</p>`
-      : `<div class="card empty" style="padding:18px">Suscripciones, gimnasio, alquiler, nómina… defínelos una vez y se apuntan solos cada mes.</div>`}
 
     <div class="section-title">Presupuestos mensuales</div>
     <div class="list">${categoriesOf('expense').map((c) => `
@@ -158,9 +145,6 @@ export function render(root) {
 
   // onclick (no addEventListener): render() se vuelve a llamar sobre el mismo root.
   root.onclick = (e) => {
-    if (e.target.closest('[data-action="add-rec"]')) return openRecurringForm(null, () => render(root));
-    const rec = e.target.closest('[data-rec]');
-    if (rec) return openRecurringForm(rec.dataset.rec, () => render(root));
     const b = e.target.closest('[data-budget]');
     if (b) return openBudgetSheet(b.dataset.budget, () => render(root));
     if (e.target.closest('[data-action="mailbox"]')) return openMailboxSheet(() => render(root));
@@ -316,8 +300,8 @@ function openMailboxSheet(onDone) {
     ${(getState().settings.mailboxLog || []).length ? `<div class="section-title" style="font-size:16px">Últimos recibidos</div>
       <div class="list kv">${getState().settings.mailboxLog.map((l) => `<div class="row">
         <span class="main">${esc(l.merchant || '(sin concepto)')} · ${esc(String(l.amount))}<div class="subtitle">${esc(String(l.at).slice(0, 16).replace('T', ' '))} · ${l.type === 'income' ? 'ingreso' : 'gasto'}</div></span>
-        <span class="trail ${l.lat && l.lon ? 'pos' : 'neg'}">${l.lat && l.lon ? '📍 Con ubicación' : 'Sin ubicación'}</span></div>`).join('')}</div>
-      <p class="hint" style="margin-top:8px">Si pone "Sin ubicación", el Atajo no está enviando la ubicación (revisa el paso <b>Get Current Location</b> y los permisos de Atajos).</p>` : ''}
+        <span class="trail ${locationStatus(l).ok ? 'pos' : 'neg'}">${esc(locationStatus(l).text)}</span></div>`).join('')}</div>
+      <p class="hint" style="margin-top:8px">"Sin ubicación": el Atajo no la envía (revisa <b>Get Current Location</b> y los permisos de Atajos). "⚠️": llega pero se guardó mal; actualiza el script del buzón (Copiar script → pegar → Nueva versión).</p>` : ''}
     <button class="btn" type="button" data-close>Cerrar</button>
   `);
   const $ = (s) => el.querySelector(s);
@@ -507,7 +491,7 @@ function openPayerSheet(id, onDone) {
 
 /* ---------- Pagos recurrentes (#8) ------------------------------------- */
 
-function openRecurringForm(id, onDone) {
+export function openRecurringForm(id, onDone) {
   const r = id ? getState().recurring.find((x) => x.id === id) : null;
   let type = r?.type ?? 'expense';
   const accounts = getState().accounts.filter((a) => a.kind === 'liquidez' || a.kind === 'tarjeta');

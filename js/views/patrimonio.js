@@ -4,12 +4,13 @@
 import { getState, addAccount, updateAccount, deleteAccount, accountValue, accountBreakdown, addHolding, updateHolding, deleteHolding, setMarketData, round2, todayISO,
   addGoal, updateGoal, deleteGoal, addPending, deletePending, addTransaction, categoriesOf,
   openDebts, debtRemaining, debtPaid, addDebt, addDebtPayment, deleteDebt, knownDebtors, saveNote, deleteNote,
-  creditCards, cardPending, nextChargeDate } from '../store.js';
+  creditCards, cardPending, nextChargeDate, categoryById, payerById } from '../store.js';
 import { MIRROR_PRESETS, hasApiKey, fetchQuote, fetchEurUsd, refreshMarket, estimateHolding } from '../market.js';
 import { computeNetWorth, snapshotNetWorth } from '../networth.js';
 import { money, esc, parseAmount, toast, icon, usd, signedPct, signedEur, tone, openSheet, privacyButton, shortDate, CUR } from '../ui.js';
 import { lineChart, progress } from '../charts.js';
 import { block, applyOrder, orderButton, openOrderSheet } from '../sections.js';
+import { openRecurringForm } from './ajustes.js';
 
 // Secciones que se pueden ordenar (en el orden original).
 const BLOCKS = [
@@ -18,6 +19,7 @@ const BLOCKS = [
   { id: 'inversiones', label: 'Inversiones' },
   { id: 'huchas', label: 'Huchas' },
   { id: 'pendiente', label: 'Pendiente de cobro' },
+  { id: 'recurrentes', label: 'Suscripciones y pagos fijos' },
   { id: 'tarjetas', label: 'Tarjetas de crédito' },
   { id: 'medeben', label: 'Me deben' },
   { id: 'notas', label: 'Notas' },
@@ -121,6 +123,8 @@ export function render(root) {
         </button>`).join('')}</div>`
         : `<div class="card empty" style="padding:18px">Becas, devoluciones de Hacienda… Se suman a la proyección, no a tu liquidez.</div>`}`)}
 
+      ${block('recurrentes', recurringHtml())}
+
       ${block('tarjetas', creditCards().length ? `<div class="section-title">Tarjetas de crédito <a href="#/ajustes">Ajustes</a></div>
       <div class="list">${creditCards().map((c) => `
         <div class="row">
@@ -191,6 +195,9 @@ export function render(root) {
 
   root.addEventListener('click', (e) => {
     if (e.target.closest('[data-order]')) return openOrderSheet('patrimonio', BLOCKS, draw);
+    if (e.target.closest('[data-action="add-rec"]')) return openRecurringForm(null, draw);
+    const rec = e.target.closest('[data-rec]');
+    if (rec) return openRecurringForm(rec.dataset.rec, draw);
     const rangeBtn = e.target.closest('[data-range]');
     if (rangeBtn) { range = rangeBtn.dataset.range; draw(); return; }
 
@@ -804,4 +811,24 @@ function openNote(id, onDone) {
     if (!confirm('¿Eliminar esta nota?')) return;
     deleteNote(n.id); close(); onDone();
   });
+}
+
+/* ---------- Suscripciones y pagos fijos (se apuntan solos cada mes) ---------- */
+function recurringHtml() {
+  const { recurring } = getState();
+  // Coste mensual de lo que está activo (gastos − ingresos fijos).
+  const monthly = recurring.filter((r) => r.active).reduce((s, r) => s + (r.type === 'income' ? -r.amount : r.amount), 0);
+  return `<div class="section-title">Suscripciones y pagos fijos
+      <button class="link-btn" data-action="add-rec">+ Añadir</button></div>
+    ${recurring.length ? `<div class="list">${recurring.map((r) => {
+      const cat = categoryById(r.category);
+      return `<button class="row ${r.active ? '' : 'is-paused'}" data-rec="${esc(r.id)}">
+        <span class="icon">${icon(cat.icon)}</span>
+        <span class="main"><div class="title">${esc(r.name)}</div>
+          <div class="subtitle">Día ${r.day} de cada mes · ${esc(cat.name)}${r.paidBy ? ` · <span class="papi-tag">${esc(payerById(r.paidBy).name)}</span>` : ''}${r.active ? '' : ' · <strong>en pausa</strong>'}</div></span>
+        <span class="trail num ${r.type === 'income' ? 'pos' : 'neg'}">${r.type === 'income' ? '+' : '−'}${money(r.amount)}</span>
+      </button>`;
+    }).join('')}</div>
+    <p class="hint" style="margin:8px 4px 0">${monthly > 0 ? `Gastos fijos: <b class="num">${money(monthly)}</b> al mes. ` : ''}Se apuntan solos el día de cobro al abrir la app.</p>`
+      : `<div class="card empty" style="padding:18px">Netflix, gimnasio, alquiler, nómina… añádelos uno a uno con su día del mes y se apuntan solos cada mes.</div>`}`;
 }

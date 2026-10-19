@@ -47,7 +47,9 @@ export const sameUser = (a, b) => {
  */
 async function pullMine(config) {
   const { items = [] } = await call({ action: 'pull', user: '' }, config);
-  return items.filter((it) => sameUser(it.user, config.user));
+  // El script guarda los textos con ' delante para que Google no los convierta; por si acaso se lo quitamos.
+  const clean = (it) => Object.fromEntries(Object.entries(it).map(([k, v]) => [k, typeof v === 'string' ? v.replace(/^'/, '') : v]));
+  return items.map(clean).filter((it) => sameUser(it.user, config.user));
 }
 
 /** Comprueba la conexión sin importar nada. Devuelve cuántos pagos esperan. */
@@ -55,7 +57,7 @@ export async function testMailbox(config) {
   return (await pullMine(config)).length;
 }
 
-const coord = (s) => Number(String(s ?? '').trim().replace(',', '.').replace(/[^\d.-]/g, ''));
+export const coord = (s) => Number(String(s ?? '').trim().replace(',', '.').replace(/[^\d.-]/g, ''));
 const currencyOf = (raw = '') => (/£|GBP/i.test(raw) ? 'GBP' : /\$|USD/i.test(raw) ? 'USD' : /€|EUR/i.test(raw) ? 'EUR' : BASE);
 
 let busy = false;
@@ -115,6 +117,14 @@ export async function pullMailbox() {
   }
 }
 
+/** Cómo llegó la ubicación de un pago del buzón: { ok, text }. */
+export function locationStatus(l) {
+  const raw = [l.lat, l.lon].map((v) => String(v ?? '').trim());
+  if (!raw[0] && !raw[1]) return { ok: false, text: 'Sin ubicación' };
+  const loc = validLocation({ lat: coord(raw[0]), lon: coord(raw[1]) });
+  return loc ? { ok: true, text: `📍 ${loc.lat.toFixed(3)}, ${loc.lon.toFixed(3)}` } : { ok: false, text: `⚠️ ${raw.join(' / ')}` };
+}
+
 /** Script para pegar en Google Apps Script (con el código secreto ya puesto). */
 export function mailboxScript(token) {
   return `// Buzón de Finanzas · pega esto en Extensiones → Apps Script de una hoja de Google
@@ -136,11 +146,15 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+// Con ' delante Google lo guarda como texto tal cual (si no, en una hoja en español
+// "42.2406" se convierte en 422406 y se pierde la ubicación).
+function texto_(v) { return "'" + String(v == null ? '' : v); }
+
 function guardar_(d) {
   if (String(d.token) !== TOKEN) return json_({ ok: false, error: 'token' });
   const id = Utilities.getUuid();
-  hoja_().appendRow([id, new Date().toISOString(), String(d.user || ''), String(d.type || 'expense'),
-    String(d.amount || ''), String(d.merchant || ''), String(d.lat || ''), String(d.lon || ''), String(d.card || '')]);
+  hoja_().appendRow([id, new Date().toISOString(), texto_(d.user), texto_(d.type || 'expense'),
+    texto_(d.amount), texto_(d.merchant), texto_(d.lat), texto_(d.lon), texto_(d.card)]);
   return json_({ ok: true, id: id });
 }
 
@@ -165,7 +179,7 @@ function doGet(e) {
   }
   const items = filas.slice(1)
     .filter(function (r) { return r[0] && (!p.user || String(r[2]) === String(p.user)); })
-    .map(function (r) { return { id: r[0], at: r[1], user: r[2], type: r[3], amount: r[4], merchant: r[5], lat: r[6], lon: r[7], card: r[8] || '' }; });
+    .map(function (r) { return { id: r[0], at: r[1], user: String(r[2]), type: String(r[3]), amount: String(r[4]), merchant: String(r[5]), lat: String(r[6]), lon: String(r[7]), card: String(r[8] || '') }; });
   return json_({ ok: true, items: items });
 }
 `;

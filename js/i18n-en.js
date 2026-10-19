@@ -585,6 +585,16 @@ export const EN = {
   'Sacado de la hucha': 'Taken out of the pot',
   'Revisión activada': 'Review on',
   'Revisión desactivada': 'Review off',
+  // Suscripciones en Patrimonio y ubicación del buzón
+  'Suscripciones y pagos fijos': 'Subscriptions and fixed payments',
+  'Gastos fijos:': 'Fixed costs:',
+  'al mes. Se apuntan solos el día de cobro al abrir la app.': 'per month. They are recorded automatically on the charge day when you open the app.',
+  'Se apuntan solos el día de cobro al abrir la app.': 'They are recorded automatically on the charge day when you open the app.',
+  'Netflix, gimnasio, alquiler, nómina… añádelos uno a uno con su día del mes y se apuntan solos cada mes.':
+    'Netflix, gym, rent, salary… add them one by one with their day of the month and they are recorded every month.',
+  '"Sin ubicación": el Atajo no la envía (revisa': '"No location": the Shortcut is not sending it (check',
+  'y los permisos de Atajos). "⚠️": llega pero se guardó mal; actualiza el script del buzón (Copiar script → pegar → Nueva versión).':
+    'and the Shortcuts permissions). "⚠️": it arrives but was stored wrongly; update the mailbox script (Copy script → paste → New version).',
   // Ordenar secciones
   '⇅ Ordenar secciones': '⇅ Reorder sections',
   'Ordenar secciones': 'Reorder sections',
