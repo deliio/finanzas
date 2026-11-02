@@ -105,7 +105,7 @@ export function ring(pct) {
   const r = 26;
   const c = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(pct, 1));
-  const stroke = pct > 1 ? 'var(--red)' : 'var(--text)';
+  const stroke = pct > 1 ? 'var(--red)' : 'var(--accent)';
   return `<svg class="ring" viewBox="0 0 64 64" aria-hidden="true">
     <circle class="ring-track" cx="32" cy="32" r="${r}"/>
     <circle class="ring-bar" cx="32" cy="32" r="${r}" stroke="${stroke}"

@@ -107,7 +107,7 @@ export function render(root) {
           <span class="main">
             <div class="title">${esc(g.name)}</div>
             <div class="subtitle num">${money(g.saved, { decimals: false })} de ${money(g.target, { decimals: false })} · ${Math.round(p * 100)} %</div>
-            ${progress(p, { color: p >= 1 ? 'var(--green)' : 'var(--text)' })}
+            ${progress(p, { color: p >= 1 ? 'var(--green)' : 'var(--accent)' })}
           </span>
         </button>`;
       }).join('')}</div>`
@@ -565,7 +565,7 @@ function openGoal(id, onDone) {
     <div class="goal-hero">
       <div class="num" style="font-size:30px;font-weight:700">${money(g.saved)}</div>
       <div class="muted num">de ${money(g.target)} · faltan ${money(Math.max(0, g.target - g.saved))}</div>
-      ${progress(p, { color: p >= 1 ? 'var(--green)' : 'var(--text)' })}
+      ${progress(p, { color: p >= 1 ? 'var(--green)' : 'var(--accent)' })}
     </div>
     <p class="hint" style="margin:6px 0 4px">El dinero sigue en tus cuentas, pero se aparta de tu liquidez disponible
       (<span class="num">${money(n.disponible)}</span> ahora).</p>

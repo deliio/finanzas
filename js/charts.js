@@ -98,7 +98,7 @@ export function donut(segments, { size = 168, thickness = 22, centerLabel = 'Tot
  * Línea con área degradada (evolución temporal).
  * points: [{ x: 'YYYY-MM-DD', y: number }] ordenados por fecha.
  */
-export function lineChart(points, { height = 140, color = 'var(--text)' } = {}) {
+export function lineChart(points, { height = 140, color = 'var(--accent)' } = {}) {
   if (points.length < 2) {
     return `<div class="chart-empty muted">La gráfica aparecerá cuando haya al menos 2 días de histórico.</div>`;
   }
@@ -144,7 +144,7 @@ export function barChart(bars, { height = 110 } = {}) {
 }
 
 /** Barra de progreso horizontal (huchas, presupuestos). */
-export function progress(pct, { color = 'var(--text)' } = {}) {
+export function progress(pct, { color = 'var(--accent)' } = {}) {
   const p = Math.max(0, Math.min(1, pct || 0));
   return `<div class="progress"><span style="width:${(p * 100).toFixed(1)}%;background:${color}"></span></div>`;
 }
