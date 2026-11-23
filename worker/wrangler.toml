@@ -8,7 +8,7 @@ APP_URL = "https://deliio.github.io/finanzas/"
 # Solo la app puede llamar al Worker desde el navegador.
 ALLOWED_ORIGIN = "https://deliio.github.io"
 # Nombre del banco en Enable Banking (GET /aspsps lo confirma).
-ASPSP_NAME = "ABANCA"
+ASPSP_NAME = "Abanca"
 ASPSP_COUNTRY = "ES"
 
 # Guarda la sesión con el banco. Crea el espacio con:
