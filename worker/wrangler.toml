@@ -16,7 +16,7 @@ ASPSP_COUNTRY = "ES"
 # y pega aquí el id que te devuelve.
 [[kv_namespaces]]
 binding = "BANK"
-id = "PEGA_AQUI_EL_ID_DEL_KV"
+id = "ada0ab5ef6dd4a30884148243f72d6c6"
 
 # Secretos (nunca en este archivo):
 #   npx wrangler secret put EB_APP_ID
