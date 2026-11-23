@@ -360,13 +360,13 @@ export function accountBreakdown(a, today = todayISO()) {
       for (const p of d.payments) if (p.account === a.id && p.at > since) flows += p.amount;
     }
   }
-  // Traspasos: en la cuenta del banco ya vienen en su saldo; en la otra cuenta (MyInvestor) se aplican.
+  // Traspasos: en las cuentas sincronizadas ya vienen en el saldo del banco; en las manuales se aplican.
   if (a.kind !== 'deuda') {
     for (const t of state.transactions) {
       if (t.type !== 'transfer' || t.createdAt <= since) continue;
       const sign = t.dir === 'in' ? 1 : -1; // respecto a t.account
       if (t.account === a.id && !a.bank) flows += sign * t.amount;
-      if (t.counterAccount === a.id) flows -= sign * t.amount;
+      if (t.counterAccount === a.id && !a.bank) flows -= sign * t.amount;
     }
   }
   return { interest, flows, value: a.balance + interest + flows };

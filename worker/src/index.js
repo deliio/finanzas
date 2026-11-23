@@ -1,18 +1,19 @@
 // Servidor del banco para Finanzas (Cloudflare Worker).
-// Guarda en secreto la clave de Enable Banking, firma los JWT y hace de puente con ABANCA.
+// Guarda en secreto la clave de Enable Banking, firma los JWT y hace de puente con tus bancos
+// (Abanca y MyInvestor). Cada banco tiene su propia sesión; "bank" elige cuál (por defecto abanca).
 // La app (GitHub Pages) solo habla con este Worker, con un token propio (APP_TOKEN).
 //
 // Secretos (wrangler secret put):  EB_APP_ID · EB_PRIVATE_KEY (.pem) · APP_TOKEN
-// Variables (wrangler.toml):       APP_URL · ALLOWED_ORIGIN · ASPSP_NAME · ASPSP_COUNTRY
+// Variables (wrangler.toml):       APP_URL · ALLOWED_ORIGIN · BANKS (JSON id → nombre en Enable Banking) · ASPSP_COUNTRY
 // KV:                              BANK  (estado de la autorización y la sesión)
 //
 // Endpoints (todos con Authorization: Bearer APP_TOKEN salvo /callback):
-//   GET  /aspsps      → datos del banco en Enable Banking (nombre exacto, validez máxima)
-//   POST /connect     → empieza la autorización y devuelve { url } del banco
-//   GET  /callback    → vuelta del banco: crea la sesión y redirige a la app
-//   GET  /status      → { connected, status, validUntil, accounts }
-//   POST /sync        → { accounts: [{ iban, balance, transactions }] } desde dateFrom
-//   POST /disconnect  → cierra la sesión
+//   GET  /aspsps?bank=      → datos del banco en Enable Banking (nombre exacto, validez máxima)
+//   POST /connect {bank}    → empieza la autorización y devuelve { url } del banco
+//   GET  /callback          → vuelta del banco: crea la sesión y redirige a la app (#/ajustes?banco=ok&b=id)
+//   GET  /status?bank=      → { connected, status, validUntil, accounts }
+//   POST /sync {bank, …}    → { accounts: [{ iban, balance, transactions }] } desde dateFrom
+//   POST /disconnect {bank} → cierra la sesión de ese banco
 
 const EB = 'https://api.enablebanking.com';
 
@@ -37,12 +38,14 @@ export default {
 
       if (!authorized(request, env)) return json({ ok: false, error: 'token' }, 401);
 
+      const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
+      const bank = bankId(env, body.bank || url.searchParams.get('bank'));
       switch (`${request.method} ${url.pathname}`) {
-        case 'GET /aspsps': return json({ ok: true, aspsp: await findAspsp(env) });
-        case 'POST /connect': return json({ ok: true, ...(await connect(url, env)) });
-        case 'GET /status': return json({ ok: true, ...(await status(env)) });
-        case 'POST /sync': return json({ ok: true, ...(await sync(request, env)) });
-        case 'POST /disconnect': return json({ ok: true, ...(await disconnect(env)) });
+        case 'GET /aspsps': return json({ ok: true, aspsp: await findAspsp(env, bank) });
+        case 'POST /connect': return json({ ok: true, ...(await connect(url, env, bank)) });
+        case 'GET /status': return json({ ok: true, bank, ...(await status(env, bank)) });
+        case 'POST /sync': return json({ ok: true, bank, ...(await sync(request, env, bank, body)) });
+        case 'POST /disconnect': return json({ ok: true, ...(await disconnect(env, bank)) });
         default: return json({ ok: false, error: 'not_found' }, 404);
       }
     } catch (err) {
@@ -138,12 +141,27 @@ async function eb(env, path, { method = 'GET', body, headers = {} } = {}) {
 
 /* ---------- Banco ----------------------------------------------------------- */
 
-async function findAspsp(env) {
+/** Bancos que se pueden conectar: id interno → nombre exacto en Enable Banking. */
+function banks(env) {
+  let list = {};
+  try { list = JSON.parse(env.BANKS || '{}'); } catch { /* valor mal escrito */ }
+  if (!Object.keys(list).length) list = { abanca: env.ASPSP_NAME || 'Abanca' };
+  return list;
+}
+
+function bankId(env, id) {
+  const list = banks(env);
+  const bank = String(id || 'abanca').toLowerCase();
+  if (!list[bank]) throw Object.assign(new Error(`Banco no configurado: ${bank}`), { code: 'config' });
+  return bank;
+}
+
+async function findAspsp(env, bank = 'abanca') {
   const country = env.ASPSP_COUNTRY || 'ES';
   const { aspsps = [] } = await eb(env, `/aspsps?country=${country}`);
-  const want = (env.ASPSP_NAME || 'ABANCA').toLowerCase();
+  const want = banks(env)[bank].toLowerCase();
   const hit = aspsps.find((a) => a.name.toLowerCase() === want) || aspsps.find((a) => a.name.toLowerCase().includes(want));
-  if (!hit) throw Object.assign(new Error(`No encuentro "${env.ASPSP_NAME}" en Enable Banking (${country}).`), { code: 'config' });
+  if (!hit) throw Object.assign(new Error(`No encuentro "${banks(env)[bank]}" en Enable Banking (${country}).`), { code: 'config' });
   return {
     name: hit.name,
     country: hit.country,
@@ -153,12 +171,12 @@ async function findAspsp(env) {
   };
 }
 
-async function connect(url, env) {
-  const aspsp = await findAspsp(env);
+async function connect(url, env, bank) {
+  const aspsp = await findAspsp(env, bank);
   const maxSeconds = Math.min(aspsp.maximumConsentValidity || 90 * 86400, 180 * 86400);
   const validUntil = new Date(Date.now() + (maxSeconds - 3600) * 1000).toISOString();
   const state = crypto.randomUUID();
-  await env.BANK.put(`state:${state}`, JSON.stringify({ aspsp }), { expirationTtl: 3600 });
+  await env.BANK.put(`state:${state}`, JSON.stringify({ aspsp, bank }), { expirationTtl: 3600 });
   const res = await eb(env, '/auth', {
     method: 'POST',
     body: {
@@ -174,9 +192,10 @@ async function connect(url, env) {
 }
 
 async function callback(url, env) {
-  const back = (params) => Response.redirect(`${env.APP_URL}#/ajustes?${new URLSearchParams(params)}`, 302);
   const state = url.searchParams.get('state') || '';
   const pending = state && (await env.BANK.get(`state:${state}`, 'json'));
+  const b = pending?.bank || 'abanca';
+  const back = (params) => Response.redirect(`${env.APP_URL}#/ajustes?${new URLSearchParams({ ...params, b })}`, 302);
   if (!pending) return back({ banco: 'error', msg: 'La autorización ha caducado o no es válida. Vuelve a intentarlo.' });
   await env.BANK.delete(`state:${state}`);
   if (url.searchParams.get('error')) {
@@ -200,19 +219,21 @@ async function callback(url, env) {
     if (!session.accounts.length) {
       return back({ banco: 'error', msg: 'El banco no ha devuelto ninguna cuenta. ¿Está vinculada en Enable Banking?' });
     }
-    await env.BANK.put('session', JSON.stringify(session));
+    await env.BANK.put(`session:${b}`, JSON.stringify(session));
     return back({ banco: 'ok' });
   } catch (err) {
     return back({ banco: 'error', msg: err.message });
   }
 }
 
-async function getSession(env) {
-  return env.BANK.get('session', 'json');
+async function getSession(env, bank = 'abanca') {
+  const s = await env.BANK.get(`session:${bank}`, 'json');
+  if (s || bank !== 'abanca') return s;
+  return env.BANK.get('session', 'json'); // antes había una sola sesión
 }
 
-async function status(env) {
-  const session = await getSession(env);
+async function status(env, bank) {
+  const session = await getSession(env, bank);
   if (!session) return { connected: false, status: 'NONE' };
   let state = 'AUTHORIZED';
   let validUntil = session.validUntil;
@@ -258,10 +279,9 @@ function psuHeaders(request, required) {
 
 const BALANCE_PRIORITY = ['CLBD', 'ITBD', 'ITAV', 'XPCD', 'CLAV', 'OPBD', 'OPAV'];
 
-async function sync(request, env) {
-  const session = await getSession(env);
+async function sync(request, env, bank, body = {}) {
+  const session = await getSession(env, bank);
   if (!session) throw Object.assign(new Error('No hay ninguna cuenta conectada.'), { code: 'expired' });
-  const body = await request.json().catch(() => ({}));
   const dateFrom = /^\d{4}-\d{2}-\d{2}$/.test(body.dateFrom || '') ? body.dateFrom : new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const online = request.headers.get('X-Psu-Online') === '1';
   const headers = online ? psuHeaders(request, session.aspsp?.requiredPsuHeaders) : {};
@@ -323,11 +343,12 @@ async function sync(request, env) {
   return { online: Object.keys(headers).length > 0, dateFrom, accounts: out };
 }
 
-async function disconnect(env) {
-  const session = await getSession(env);
+async function disconnect(env, bank) {
+  const session = await getSession(env, bank);
   if (session) {
     try { await eb(env, `/sessions/${session.id}`, { method: 'DELETE' }); } catch { /* ya no existía */ }
-    await env.BANK.delete('session');
+    await env.BANK.delete(`session:${bank}`);
+    if (bank === 'abanca') await env.BANK.delete('session');
   }
   return { connected: false };
 }

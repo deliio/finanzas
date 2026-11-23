@@ -10,7 +10,7 @@ import { openTxSheet } from './movimientos.js';
 import { openTracker } from './analisis.js';
 import { openBudgetSheet } from './ajustes.js';
 import { block, applyOrder, orderButton, openOrderSheet } from '../sections.js';
-import { bankConnected, needsReconnect, bankExpired, startConnect } from '../bank.js';
+import { reconnectList, bankExpired, bankName, startConnect } from '../bank.js';
 
 // Secciones que se pueden ordenar (en el orden original).
 const BLOCKS = [
@@ -70,11 +70,11 @@ export function render(root, { navigate }) {
         </a>` : '';
       })()}
 
-      ${bankConnected() && needsReconnect() ? `<button type="button" class="review-banner bank-banner" data-bank-reconnect>
+      ${reconnectList().map((id) => `<button type="button" class="review-banner bank-banner" data-bank-reconnect="${id}">
         <span class="review-count num-plain">${icon('bank')}</span>
-        <span class="main">${bankExpired() ? 'La conexión con Abanca ha caducado' : 'La conexión con Abanca caduca pronto'}</span>
-        <span class="bank-banner-btn">Reconectar Abanca</span>
-      </button>` : ''}
+        <span class="main">${bankExpired(id) ? `La conexión con ${bankName(id)} ha caducado` : `La conexión con ${bankName(id)} caduca pronto`}</span>
+        <span class="bank-banner-btn">Reconectar</span>
+      </button>`).join('')}
 
       ${block('balance', `<section class="card hero">
         <div class="label">Balance ${isCurrentMonth(key) ? 'del mes' : `de ${esc(monthLabel(key).toLowerCase())}`}</div>
@@ -140,7 +140,8 @@ export function render(root, { navigate }) {
 
   root.addEventListener('click', (e) => {
     if (e.target.closest('[data-order]')) return openOrderSheet('inicio', BLOCKS, draw);
-    if (e.target.closest('[data-bank-reconnect]')) return startConnect().catch((err) => alert(err.message));
+    const reconnect = e.target.closest('[data-bank-reconnect]');
+    if (reconnect) return startConnect(reconnect.dataset.bankReconnect).catch((err) => alert(err.message));
     const payerBtn = e.target.closest('[data-payer-bucket]');
     if (payerBtn) return openTracker({ kind: 'cat', id: payerBtn.dataset.payerBucket }, draw);
     const ringCard = e.target.closest('[data-budget]');

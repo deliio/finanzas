@@ -149,7 +149,7 @@ export function render(root) {
           ${list.length ? `<div class="list">${list.map((a) => {
             const { value, interest, flows } = accountBreakdown(a);
             const parts = [];
-            if (a.bank) parts.push(`🏦 sincronizada ${syncAgo()}`);
+            if (a.bank) parts.push(`🏦 sincronizada ${syncAgo(a.bank.id || 'abanca')}`);
             if (kind === 'liquidez' && a.interestRate) parts.push(`${pctPlain(a.interestRate)} · <span class="pos num">+${money(interest)}</span>`);
             if (flows) parts.push(`<span class="num ${tone(flows)}">${signedEur(flows)}</span> movs.`);
             return `

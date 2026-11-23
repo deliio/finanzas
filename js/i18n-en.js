@@ -627,6 +627,14 @@ export const EN = {
   'Abanca conectada': 'Abanca connected',
   '¿Desconectar Abanca? Los movimientos que ya tienes se quedan.': 'Disconnect Abanca? Transactions you already have are kept.',
   'Servidor listo. Ahora autoriza a la app a leer tu cuenta (te lleva a Abanca).': 'Server ready. Now authorise the app to read your account (it takes you to Abanca).',
+  'Bancos': 'Banks',
+  'Sin conectar': 'Not connected',
+  'Conectar': 'Connect',
+  'Servidor': 'Server',
+  'MyInvestor (manual)': 'MyInvestor (manual)',
+  'Reconectar': 'Reconnect',
+  'El saldo de cada cuenta enlazada es el del banco. Lo que pasa entre tus cuentas es un': 'Each linked account takes its balance from the bank. Money moving between your accounts is a',
+  ': no cuenta como ingreso ni gasto.': ': not counted as income or expense.',
   // Ordenar secciones
   '⇅ Ordenar secciones': '⇅ Reorder sections',
   'Ordenar secciones': 'Reorder sections',
@@ -673,6 +681,12 @@ const s = (n) => (Number(n) === 1 ? '' : 's');
 
 // Textos con números o nombres dentro. Se prueban en orden.
 export const EN_PATTERNS = [
+  [/^La conexión con (.+) ha caducado$/, (_, b) => `The ${b} connection has expired`],
+  [/^La conexión con (.+) caduca pronto$/, (_, b) => `The ${b} connection expires soon`],
+  [/^Reconectar (.+)$/, (_, b) => `Reconnect ${b}`],
+  [/^Abriendo (.+)…$/, (_, b) => `Opening ${b}…`],
+  [/^(.+) conectada$/, (_, b) => `${b} connected`],
+  [/^(.+) desconectado$/, (_, b) => `${b} disconnected`],
   [/^(Conectada hasta|Caducó) el (.+)$/, (_, w, d) => `${w === 'Caducó' ? 'Expired on' : 'Connected until'} ${d}`],
   [/^sincronizada (.+)$/, (_, a) => `synced ${a.replace(/^hace (\d+) min$/, '$1 min ago').replace(/^hace (\d+) h$/, '$1 h ago').replace(/^hace (\d+) días$/, '$1 days ago').replace('ahora mismo', 'just now').replace('ayer', 'yesterday').replace('sin sincronizar', 'never')}`],
   [/^Traspaso (desde|a) (.+)$/, (_, d, n) => `Transfer ${d === 'desde' ? 'from' : 'to'} ${n}`],

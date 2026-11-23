@@ -7,8 +7,9 @@ compatibility_date = "2025-01-01"
 APP_URL = "https://deliio.github.io/finanzas/"
 # Solo la app puede llamar al Worker desde el navegador.
 ALLOWED_ORIGIN = "https://deliio.github.io"
-# Nombre del banco en Enable Banking (GET /aspsps lo confirma).
-ASPSP_NAME = "Abanca"
+# Bancos que se pueden conectar: id → nombre exacto en Enable Banking (GET /aspsps lo confirma).
+# Si tu cuenta de MyInvestor estuviera en Andbank, cambia "MyInvestor Banco" por "Andbank Banca privada".
+BANKS = '{"abanca":"Abanca","myinvestor":"MyInvestor Banco"}'
 ASPSP_COUNTRY = "ES"
 
 # Guarda la sesión con el banco. Crea el espacio con:
