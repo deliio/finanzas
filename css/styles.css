@@ -778,3 +778,8 @@ button.left { background: none; color: var(--accent); font-size: 17px; justify-s
 
 /* ---------- Tema dorado ------------------------------------------------ */
 .page-header h1, .guide-title, .sheet-title, .review-done h2 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.02em; }
+
+/* ---------- Banco ------------------------------------------------------ */
+.bank-banner { width: 100%; text-align: left; border: 0; font: inherit; }
+.bank-banner .review-count svg { width: 16px; height: 16px; }
+.bank-banner-btn { font-size: 13px; font-weight: 700; white-space: nowrap; }

@@ -31,7 +31,7 @@ export function render(root) {
     const txs = transactionsSorted().filter((t) => (lastType === 'all' || t.type === lastType) && matches(t, lastQuery));
     const byDay = new Map();
     txs.forEach((t) => byDay.has(t.date) ? byDay.get(t.date).push(t) : byDay.set(t.date, [t]));
-    const net = txs.reduce((s, t) => s + (t.type === 'income' ? t.amount : -t.amount), 0);
+    const net = txs.reduce((s, t) => s + (t.type === 'transfer' ? 0 : t.type === 'income' ? t.amount : -t.amount), 0);
 
     results.innerHTML = `
       ${lastQuery || lastType !== 'all' ? `<div class="result-summary">${txs.length} resultado${txs.length === 1 ? '' : 's'}
@@ -104,9 +104,12 @@ export function openTxSheet(id, onDone) {
   const linked = getState().debts.filter((d) => d.txId === t.id);
 
   const rows = [
-    ['Importe', `<span class="num ${t.type === 'income' ? 'pos' : 'neg'}">${signedMoney(t.amount, t.type)}</span>`],
+    ['Importe', t.type === 'transfer' ? `<span class="num muted">${money(t.amount)}</span>` : `<span class="num ${t.type === 'income' ? 'pos' : 'neg'}">${signedMoney(t.amount, t.type)}</span>`],
     ['Fecha', shortDate(t.date)],
-    ['Categoría', esc(cat.name)],
+    t.type === 'transfer'
+      ? ['Traspaso', `${t.dir === 'in' ? 'Desde' : 'Hacia'} ${esc(getState().accounts.find((a) => a.id === t.counterAccount)?.name || '—')} · no es ingreso ni gasto`]
+      : ['Categoría', esc(cat.name)],
+    t.bank && ['Banco', `${esc(t.bank.counterparty || t.bank.text || 'Abanca')} · confirmado por el banco`],
     account && ['Cuenta', esc(account.name)],
     t.currency && ['Importe original', `<span class="num">${amountToInput(t.originalAmount)} ${currencySymbol(t.currency)}</span> · 1 ${currencySymbol(t.currency)} = ${String(t.fxRate).replace('.', DECIMAL)} ${CUR}`],
     t.paidBy && ['Pagado por', `${esc(payerById(t.paidBy).name)} · no resta de tus cuentas`],
@@ -117,7 +120,7 @@ export function openTxSheet(id, onDone) {
   ].filter(Boolean);
 
   const { el, close } = openSheet(`
-    <h3 class="sheet-title">${esc(t.description || cat.name)}</h3>
+    <h3 class="sheet-title">${esc(t.description || (t.type === 'transfer' ? 'Traspaso' : cat.name))}</h3>
     <div class="list kv">${rows.map(([k, v]) => `<div class="row"><span class="main">${k}</span><span class="trail">${v}</span></div>`).join('')}</div>
     <button class="btn btn-danger" type="button" id="tx-del" style="margin-top:18px">Eliminar movimiento</button>
     <button class="btn" type="button" data-close>Cerrar</button>

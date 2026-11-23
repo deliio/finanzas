@@ -11,6 +11,7 @@ import { money, esc, parseAmount, toast, icon, usd, signedPct, signedEur, tone, 
 import { lineChart, progress } from '../charts.js';
 import { block, applyOrder, orderButton, openOrderSheet } from '../sections.js';
 import { openRecurringForm } from './ajustes.js';
+import { bankConnected, syncAgo, syncBank } from '../bank.js';
 
 // Secciones que se pueden ordenar (en el orden original).
 const BLOCKS = [
@@ -144,10 +145,11 @@ export function render(root) {
       ${Object.entries(KINDS).map(([kind, k]) => {
         const list = accounts.filter((a) => a.kind === kind);
         return block(kind, `
-          <div class="section-title">${k.label}<span class="num muted" style="font-size:15px">${money(total(kind))}</span></div>
+          <div class="section-title">${k.label}${kind === 'liquidez' && bankConnected() ? '<button class="link-btn" data-action="bank-sync">Sincronizar</button>' : ''}<span class="num muted" style="font-size:15px">${money(total(kind))}</span></div>
           ${list.length ? `<div class="list">${list.map((a) => {
             const { value, interest, flows } = accountBreakdown(a);
             const parts = [];
+            if (a.bank) parts.push(`🏦 sincronizada ${syncAgo()}`);
             if (kind === 'liquidez' && a.interestRate) parts.push(`${pctPlain(a.interestRate)} · <span class="pos num">+${money(interest)}</span>`);
             if (flows) parts.push(`<span class="num ${tone(flows)}">${signedEur(flows)}</span> movs.`);
             return `
@@ -195,6 +197,14 @@ export function render(root) {
 
   root.addEventListener('click', (e) => {
     if (e.target.closest('[data-order]')) return openOrderSheet('patrimonio', BLOCKS, draw);
+    const syncBtn = e.target.closest('[data-action="bank-sync"]');
+    if (syncBtn) {
+      syncBtn.disabled = true; syncBtn.textContent = 'Sincronizando…';
+      syncBank({ online: true })
+        .then((n) => { toast(n ? `${n} movimiento${n === 1 ? '' : 's'} nuevo${n === 1 ? '' : 's'} · en Revisar` : 'Todo al día'); draw(); })
+        .catch((err) => { alert(err.message); draw(); });
+      return;
+    }
     if (e.target.closest('[data-action="add-rec"]')) return openRecurringForm(null, draw);
     const rec = e.target.closest('[data-rec]');
     if (rec) return openRecurringForm(rec.dataset.rec, draw);

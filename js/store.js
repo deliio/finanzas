@@ -175,6 +175,13 @@ export function addTransaction(tx, { silent = false } = {}) {
   return record;
 }
 
+/** Movimiento ya preparado (banco): se guarda tal cual. Llama a persist() después. */
+export function addRawTransaction(record) {
+  const r = { id: uid(), tags: [], note: '', createdAt: new Date().toISOString(), ...record, amount: round2(record.amount) };
+  state.transactions.push(r);
+  return r;
+}
+
 export function updateTransaction(id, patch) {
   const t = state.transactions.find((x) => x.id === id);
   if (!t) return;
@@ -320,17 +327,28 @@ export function updateAccount(id, patch) {
  *   interest: intereses devengados desde el último saldo real (capitalización diaria
  *             con el % anual; se aproxima muy bien al abono mensual).
  *   flows:    ingresos − gastos asignados a la cuenta y apuntados después de ese saldo.
+ * Cuenta sincronizada con el banco (a.bank): el saldo es el del banco, que ya incluye lo que
+ * el banco ha confirmado; solo se suma lo apuntado en la app (Apple Pay, buzón…) en los
+ * últimos días que el banco aún no ha confirmado.
+ * Traspasos (type "transfer"): mueven dinero entre tus cuentas sin ser ingreso ni gasto.
  */
+const BANK_PENDING_DAYS = 10;
+
 export function accountBreakdown(a, today = todayISO()) {
   let interest = 0, flows = 0;
+  const since = a.syncedAt || a.updatedAt;
   if (a.kind === 'liquidez') {
     if (a.interestRate) {
       const days = Math.max(0, (Date.parse(today) - Date.parse(a.updatedAt)) / 86400000);
       interest = a.balance * (Math.pow(1 + a.interestRate / 100, days / 365) - 1);
     }
-    const since = a.syncedAt || a.updatedAt;
+    const recent = todayISO(new Date(Date.parse(today) - BANK_PENDING_DAYS * 86400000));
     for (const t of state.transactions) {
-      if (t.account === a.id && !t.paidBy && t.createdAt > since) flows += t.type === 'income' ? t.amount : -t.amount;
+      if (t.account !== a.id || t.paidBy || t.type === 'transfer') continue;
+      const sign = t.type === 'income' ? 1 : -1;
+      if (a.bank) {
+        if (!t.bank && t.date >= recent && t.createdAt > (a.bank.since || '')) flows += sign * t.amount;
+      } else if (t.createdAt > since) flows += sign * t.amount;
     }
     // Cargos de tarjetas de crédito: el total del mes sale de la cuenta el día de cobro.
     for (const c of state.cardCharges) {
@@ -340,6 +358,15 @@ export function accountBreakdown(a, today = todayISO()) {
     for (const d of state.debts) {
       if (d.account === a.id && d.createdAt > since) flows -= d.amount;
       for (const p of d.payments) if (p.account === a.id && p.at > since) flows += p.amount;
+    }
+  }
+  // Traspasos: en la cuenta del banco ya vienen en su saldo; en la otra cuenta (MyInvestor) se aplican.
+  if (a.kind !== 'deuda') {
+    for (const t of state.transactions) {
+      if (t.type !== 'transfer' || t.createdAt <= since) continue;
+      const sign = t.dir === 'in' ? 1 : -1; // respecto a t.account
+      if (t.account === a.id && !a.bank) flows += sign * t.amount;
+      if (t.counterAccount === a.id) flows -= sign * t.amount;
     }
   }
   return { interest, flows, value: a.balance + interest + flows };
@@ -495,6 +522,7 @@ function cardSum(card, from, to) {
   let sum = 0;
   for (const t of state.transactions) {
     if (t.account !== card.id || t.paidBy || t.date <= from || t.date > to) continue;
+    if (t.type === 'transfer') continue;
     sum += t.type === 'income' ? -t.amount : t.amount;
   }
   for (const d of state.debts) {

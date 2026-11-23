@@ -6,6 +6,7 @@ import { getState, replaceState, resetState, todayISO, setSetting, addRecurring,
   addCategory, updateCategory, deleteCategory, categoryUsage, fallbackCategory,
   creditCards, addCreditCard, updateCreditCard, deleteAccount, cardPending, nextChargeDate } from '../store.js';
 import { accountOptionsHtml } from './nuevo-gasto.js';
+import { bankSectionHtml, bindBankSection } from './banco.js';
 import { ICONS } from '../icons.js';
 import { fetchQuote, estimateHolding } from '../market.js';
 import { mailboxConfig, mailboxReady, newToken, testMailbox, pullMailbox, mailboxScript, locationStatus } from '../mailbox.js';
@@ -57,6 +58,8 @@ export function render(root) {
       </div>`}
 
     <a class="btn" href="#/guia" style="margin-top:10px">${icon('book')} Guía paso a paso: buzón y atajos</a>
+
+    ${bankSectionHtml()}
 
     <div class="section-title">Tarjetas de crédito <button class="link-btn" data-action="add-card">+ Añadir</button></div>
     ${creditCards().length ? `<div class="list">${creditCards().map((c) => `
@@ -166,6 +169,7 @@ export function render(root) {
     if (p) openPayerSheet(p.dataset.payer, () => render(root));
   };
 
+  bindBankSection(root, () => render(root));
   root.querySelector('#set-lang').addEventListener('change', (e) => {
     setSetting('language', e.target.value);
     location.reload(); // los textos y formatos se aplican al arrancar

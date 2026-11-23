@@ -1,12 +1,12 @@
 // Service worker: red primero (siempre la última versión) con copia offline de respaldo.
 // Sube CACHE_VERSION cada vez que publiques cambios para forzar la actualización.
-const CACHE_VERSION = 'finanzas-v31';
+const CACHE_VERSION = 'finanzas-v32';
 
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
-  './css/styles.css?v=31',
+  './css/styles.css?v=32',
   './js/app.js',
   './js/store.js',
   './js/ui.js',
@@ -29,6 +29,8 @@ const APP_SHELL = [
   './js/i18n.js',
   './js/i18n-en.js',
   './js/sections.js',
+  './js/bank.js',
+  './js/views/banco.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',

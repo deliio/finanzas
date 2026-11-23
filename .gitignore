@@ -1,2 +1,9 @@
 .claude/
 finanzas.zip
+
+# Servidor del banco: la clave privada y los secretos NUNCA al repo (GitHub Pages lo publica todo)
+*.pem
+*.key
+worker/.dev.vars
+worker/.wrangler/
+worker/node_modules/

@@ -1,0 +1,24 @@
+name = "finanzas-banco"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+# Dirección de la app (adonde vuelve el banco al autorizar).
+APP_URL = "https://deliio.github.io/finanzas/"
+# Solo la app puede llamar al Worker desde el navegador.
+ALLOWED_ORIGIN = "https://deliio.github.io"
+# Nombre del banco en Enable Banking (GET /aspsps lo confirma).
+ASPSP_NAME = "ABANCA"
+ASPSP_COUNTRY = "ES"
+
+# Guarda la sesión con el banco. Crea el espacio con:
+#   npx wrangler kv namespace create BANK
+# y pega aquí el id que te devuelve.
+[[kv_namespaces]]
+binding = "BANK"
+id = "PEGA_AQUI_EL_ID_DEL_KV"
+
+# Secretos (nunca en este archivo):
+#   npx wrangler secret put EB_APP_ID
+#   npx wrangler secret put EB_PRIVATE_KEY < private.key
+#   npx wrangler secret put APP_TOKEN

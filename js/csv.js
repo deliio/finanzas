@@ -106,7 +106,7 @@ export function powerBIFiles(state, { estimateHolding } = {}) {
     const d = new Date(t.date + 'T00:00:00');
     tx.push([
       t.id, t.date, d.getFullYear(), d.getMonth() + 1, t.date.slice(0, 7), `T${Math.floor(d.getMonth() / 3) + 1}`, WEEKDAYS[d.getDay()],
-      t.type === 'income' ? 'ingreso' : 'gasto', num(t.amount), num(t.type === 'income' ? t.amount : -t.amount),
+      t.type === 'transfer' ? 'traspaso' : t.type === 'income' ? 'ingreso' : 'gasto', num(t.amount), num(t.type === 'transfer' ? 0 : t.type === 'income' ? t.amount : -t.amount),
       t.category, categoryById(t.category).name, t.description,
       t.account || '', accountName[t.account] ?? '', (t.tags || []).join('|'), (t.tags || []).length,
       t.split === true ? 2 : (t.split || 1), t.paidBy ? payerById(t.paidBy).name : '', t.currency || BASE, num(t.originalAmount ?? t.amount), t.fxRate ?? 1,

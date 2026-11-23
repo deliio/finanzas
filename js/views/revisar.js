@@ -5,10 +5,11 @@
 
 import { getState, pendingReview, updateTransaction, deleteTransaction, categoriesOf, categoryById, payerById, todayISO, round2, rememberWalletCard } from '../store.js';
 import { accountOptionsHtml } from './nuevo-gasto.js';
+import { learnRule, makeTransfer } from '../bank.js';
 import { esc, icon, money, signedMoney, parseAmount, amountToInput, toast, currencySymbol, CUR } from '../ui.js';
 import { LOCALE } from '../i18n.js';
 
-const SOURCE = { atajo: 'Apple Pay', url: 'Atajo', recurrente: 'Recurrente', buzon: 'Buzón' };
+const SOURCE = { atajo: 'Apple Pay', url: 'Atajo', recurrente: 'Recurrente', buzon: 'Buzón', banco: 'Banco' };
 
 const timeFmt = new Intl.DateTimeFormat(LOCALE, { hour: '2-digit', minute: '2-digit' });
 const dayFmt = new Intl.DateTimeFormat(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -26,7 +27,7 @@ function arrived(t) {
 
 const accountName = (t) => getState().accounts.find((a) => a.id === t.account)?.name || '';
 
-const hasCategory = (t) => categoriesOf(t.type).some((c) => c.id === t.category);
+const hasCategory = (t) => t.type === 'transfer' || categoriesOf(t.type).some((c) => c.id === t.category);
 const byArrival = (a, b) => (b.receivedAt || b.createdAt).localeCompare(a.receivedAt || a.createdAt);
 
 export function render(root, { navigate }) {
@@ -68,7 +69,7 @@ export function render(root, { navigate }) {
             <div class="subtitle">${esc(arrived(t))} · ${esc(SOURCE[t.source] || 'Auto')}${t.location ? ` · ${icon('pin')}` : ''}</div>
             <div class="subtitle">${cat ? esc(cat.name) : '<span class="review-missing small">Sin categoría</span>'}${t.paidBy ? ` · lo paga ${esc(payerById(t.paidBy).name)}` : ''}${accountName(t) ? ` · ${esc(accountName(t))}` : ''}</div>
           </span>
-          <span class="trail num ${t.type === 'income' ? 'pos' : 'neg'}">${signedMoney(t.amount, t.type)}</span>
+          ${t.type === 'transfer' ? `<span class="trail num muted">⇄ ${money(t.amount)}</span>` : `<span class="trail num ${t.type === 'income' ? 'pos' : 'neg'}">${signedMoney(t.amount, t.type)}</span>`}
         </button>`;
       }).join('')}</div>
 
@@ -104,7 +105,7 @@ export function render(root, { navigate }) {
       <div class="review-meta">
         <span class="chip">${esc(arrived(t))}</span>
         <span class="chip">${esc(SOURCE[t.source] || 'Automático')}</span>
-        <span class="chip">${t.type === 'income' ? 'Ingreso' : 'Gasto'}</span>
+        <span class="chip">${t.type === 'transfer' ? 'Traspaso' : t.type === 'income' ? 'Ingreso' : 'Gasto'}</span>
         ${t.paidBy ? `<span class="chip">Lo paga ${esc(payerById(t.paidBy).name)}</span>` : ''}
         ${t.location ? `<span class="chip">${icon('pin')} Con ubicación</span>` : ''}
       </div>
@@ -125,7 +126,8 @@ export function render(root, { navigate }) {
       </div>
       ${t.walletCard ? `<p class="hint" style="margin:-12px 4px 18px">Pagado con <b>${esc(t.walletCard)}</b> en Wallet. ${t.account ? 'Si eliges otra cuenta' : 'Elige su cuenta y'}, la recordaré para los próximos pagos con esa tarjeta.</p>` : ''}
 
-      <div class="section-title" style="margin-top:0">Categoría ${category ? '' : '<span class="review-missing">Sin categoría</span>'}</div>
+      ${t.transferHint ? `<button type="button" class="btn" id="rv-transfer" style="margin-bottom:18px">⇄ Es un traspaso con MyInvestor</button>` : ''}
+      ${t.type === 'transfer' ? '<p class="hint" style="margin:0 4px 18px">Traspaso entre tus cuentas: no cuenta como ingreso ni gasto.</p>' : `<div class="section-title" style="margin-top:0">Categoría ${category ? '' : '<span class="review-missing">Sin categoría</span>'}</div>`}
       <div class="cat-grid">${cats.map((c) => `
         <button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${c.id === category}">
           <span class="cat-ico">${icon(c.icon)}</span><span>${esc(c.name)}</span>
@@ -140,7 +142,7 @@ export function render(root, { navigate }) {
 
     const $ = (s) => root.querySelector(s);
     const amountEl = $('#rv-amount');
-    const refresh = () => { $('#rv-ok').disabled = !(parseAmount(amountEl.value) > 0 && category); };
+    const refresh = () => { $('#rv-ok').disabled = !(parseAmount(amountEl.value) > 0 && (category || t.type === 'transfer')); };
 
     $('#rv-back').addEventListener('click', showList);
 
@@ -162,7 +164,7 @@ export function render(root, { navigate }) {
     $('#rv-ok').addEventListener('click', () => {
       const amount = parseAmount(amountEl.value);
       if (!(amount > 0)) return toast('Importe no válido');
-      if (!category) return toast('Elige una categoría');
+      if (!category && t.type !== 'transfer') return toast('Elige una categoría');
       const account = $('#rv-acc') ? $('#rv-acc').value : t.account;
       updateTransaction(t.id, {
         amount: round2(amount), description: $('#rv-desc').value.trim(),
@@ -170,8 +172,16 @@ export function render(root, { navigate }) {
       });
       // Aprende la tarjeta de Wallet → cuenta para que los próximos pagos lleguen ya bien.
       if (t.walletCard && account) rememberWalletCard(t.walletCard, account);
+      learnRule(t, category); // movimientos del banco: la próxima vez llega con esta categoría
       done++;
       toast('Confirmado');
+      showList();
+    });
+
+    $('#rv-transfer')?.addEventListener('click', () => {
+      try { makeTransfer(t); } catch (err) { return alert(err.message); }
+      done++;
+      toast('Marcado como traspaso');
       showList();
     });
 

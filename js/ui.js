@@ -1,7 +1,7 @@
 // Helpers de presentación compartidos por las vistas.
 
 import { icon } from './icons.js';
-import { payerById } from './store.js';
+import { payerById, getState } from './store.js';
 import { LOCALE, BASE } from './i18n.js';
 export { icon };
 
@@ -128,7 +128,9 @@ export const currencySymbol = (c) => {
 export const CUR = currencySymbol(BASE);
 
 export function txRow(tx, cat) {
+  if (tx.type === 'transfer') return transferRow(tx);
   const extras = [];
+  if (tx.bank) extras.push('banco');
   if (tx.revisado === false) extras.push('<span class="review-tag">Por revisar</span>');
   if (tx.paidBy) extras.push(`<span class="papi-tag">${esc(payerById(tx.paidBy).name)}</span>`);
   if (tx.split) extras.push(`÷${splitCount(tx)}`);
@@ -141,6 +143,20 @@ export function txRow(tx, cat) {
       <div class="subtitle">${esc(cat.name)} · ${shortDate(tx.date)}${extras.length ? ' · ' + extras.join(' · ') : ''}</div>
     </span>
     <span class="trail num ${tx.type === 'income' ? 'pos' : 'neg'}">${signedMoney(tx.amount, tx.type)}</span>
+  </button>`;
+}
+
+/** Traspaso entre tus cuentas: ni ingreso ni gasto (importe en gris). */
+export function transferRow(tx) {
+  const name = (id) => getState().accounts.find((a) => a.id === id)?.name || '—';
+  const [from, to] = tx.dir === 'in' ? [tx.counterAccount, tx.account] : [tx.account, tx.counterAccount];
+  return `<button class="row" data-tx="${esc(tx.id)}">
+    <span class="icon">${icon('repeat')}</span>
+    <span class="main">
+      <div class="title">${esc(tx.description || 'Traspaso')}</div>
+      <div class="subtitle">Traspaso · ${esc(name(from))} → ${esc(name(to))} · ${shortDate(tx.date)}</div>
+    </span>
+    <span class="trail num muted">${money(tx.amount)}</span>
   </button>`;
 }
 

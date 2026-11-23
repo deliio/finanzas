@@ -12,6 +12,7 @@ import { readPrefillFromURL, quickSavePending } from './views/nuevo-gasto.js';
 import * as revisar from './views/revisar.js';
 import * as guia from './views/guia.js';
 import { pullMailbox } from './mailbox.js';
+import { autoSyncBank, handleBankReturn } from './bank.js';
 import { getState, setSetting, runRecurring, runCardCharges, creditCards } from './store.js';
 import { snapshotNetWorth } from './networth.js';
 import { toast, icon, money } from './ui.js';
@@ -104,12 +105,25 @@ function checkMailbox() {
 }
 
 startI18n(); // en inglés traduce todo lo que se pinte
+// --- Banco (Abanca vía tu Worker) ---------------------------------------
+function checkBank() {
+  autoSyncBank().then((n) => {
+    if (!n) return;
+    toast(`${n} movimiento${n === 1 ? '' : 's'} del banco · pendiente${n === 1 ? '' : 's'} de revisar`);
+    if (['inicio', 'movimientos', 'patrimonio'].includes(currentRoute())) render();
+  });
+}
+
 applyRecurring();
 snapshotNetWorth();
 window.addEventListener('hashchange', render);
 render();
 window.__appStarted?.(); // la app arrancó: nunca mostrar el aviso de reparación
 checkMailbox();
+// Vuelta de Abanca tras autorizar; si no venimos de ahí, sincroniza si toca.
+handleBankReturn()
+  .then((msg) => { if (msg) { toast(msg); render(); } else checkBank(); })
+  .catch((err) => { alert(err.message); render(); });
 
 // Al volver a la app (iOS la mantiene en memoria), generamos lo que toque y refrescamos.
 document.addEventListener('visibilitychange', () => {
@@ -117,6 +131,7 @@ document.addEventListener('visibilitychange', () => {
   snapshotNetWorth();
   if (applyRecurring() && currentRoute() !== 'nuevo') render();
   checkMailbox();
+  checkBank();
 });
 
 // --- PWA ---------------------------------------------------------------
