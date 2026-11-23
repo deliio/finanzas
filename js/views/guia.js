@@ -7,12 +7,9 @@ import { mailboxConfig, newToken, testMailbox, pullMailbox, mailboxScript } from
 import { esc, icon, toast } from '../ui.js';
 
 // Enlaces de iCloud para instalar los atajos de un toque (vacío = solo instrucciones).
-// Llevan dentro la URL y el código del buzón de la familia: al instalarlos hay que poner tu nombre.
-const SHORTCUT_LINKS = {
-  comercio: 'https://www.icloud.com/shortcuts/4c75040b408b4c938d173c58c46d2fc0',
-  ingreso: 'https://www.icloud.com/shortcuts/b8df8241c9ad4cacbcd5b3a730464fb2',
-  gasto: 'https://www.icloud.com/shortcuts/b807ddd64efd47fb8a4f383a91d71026',
-};
+// No se publican: un atajo compartido lleva dentro la URL y el código del buzón, y esta web es pública.
+// Para la familia, compártelos en privado (AirDrop o mensaje) en vez de ponerlos aquí.
+const SHORTCUT_LINKS = { comercio: '', ingreso: '', gasto: '' };
 
 /* ---------- Dibujos ------------------------------------------------------ */
 
